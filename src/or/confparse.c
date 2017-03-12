@@ -33,6 +33,9 @@ static void config_reset(const config_format_t *fmt, void *options,
                          const config_var_t *var, int use_defaults);
 static config_line_t *config_lines_dup_and_filter(const config_line_t *inp,
                                                   const char *key);
+static int config_get_lines_aux(const char *string, config_line_t **result,
+                                int extended, int recursion_level,
+                                config_line_t **last);
 
 /** Allocate an empty configuration object of a given format type. */
 void *
@@ -114,21 +117,24 @@ config_line_find(const config_line_t *lines,
   return NULL;
 }
 
-/** Helper: parse the config string and strdup into key/value
- * strings. Set *result to the list, or NULL if parsing the string
- * failed.  Return 0 on success, -1 on failure. Warn and ignore any
- * misformatted lines.
- *
- * If <b>extended</b> is set, then treat keys beginning with / and with + as
- * indicating "clear" and "append" respectively. */
+/** Auxiliary function that does all the work of config_get_lines.
+ * <b>recursion_level</b> is the count of how many nested %includes we have.
+ * Returns the a pointer to the last element of the <b>result</b> in
+ * <b>last</b>. */
 int
-config_get_lines(const char *string, config_line_t **result, int extended)
+config_get_lines_aux(const char *string, config_line_t **result, int extended,
+                     int recursion_level, config_line_t **last)
 {
-  config_line_t *list = NULL, **next;
+  config_line_t *list = NULL, *list_last = NULL;
   char *k, *v;
   const char *parse_err;
 
-  next = &list;
+  if (recursion_level > MAX_INCLUDE_RECURSION_LEVEL) {
+    log_warn(LD_CONFIG, "Error while parsing configuration: more than %d "
+             "nested %%includes.", MAX_INCLUDE_RECURSION_LEVEL);
+    return -1;
+  }
+
   do {
     k = v = NULL;
     string = parse_config_line_from_str_verbose(string, &k, &v, &parse_err);
@@ -157,23 +163,84 @@ config_get_lines(const char *string, config_line_t **result, int extended)
           command = CONFIG_LINE_CLEAR;
         }
       }
-      /* This list can get long, so we keep a pointer to the end of it
-       * rather than using config_line_append over and over and getting
-       * n^2 performance. */
-      *next = tor_malloc_zero(sizeof(config_line_t));
-      (*next)->key = k;
-      (*next)->value = v;
-      (*next)->next = NULL;
-      (*next)->command = command;
-      next = &((*next)->next);
+
+      if (!strcmp(k, "%include")) {
+        char *included_conf = read_file_to_str(v, 0, NULL);
+        if (!included_conf) {
+          log_warn(LD_CONFIG, "Error reading included configuration "
+                   "file: \"%s\".", v);
+          config_free_lines(list);
+          tor_free(k);
+          tor_free(v);
+          return -1;
+        }
+
+        config_line_t *included_list = NULL;
+        config_line_t *included_list_last = NULL;
+        if (config_get_lines_aux(included_conf, &included_list, extended,
+                                 recursion_level+1, &included_list_last) < 0) {
+          log_warn(LD_CONFIG, "Error parsing included configuration "
+                   "file: \"%s\".", v);
+          config_free_lines(list);
+          tor_free(included_conf);
+          tor_free(k);
+          tor_free(v);
+          return -1;
+        }
+
+        if (!list) {
+          list = included_list;
+          list_last = list;
+        } else if (included_list) {
+          list_last->next = included_list;
+          list_last = included_list_last;
+        }
+
+        tor_free(included_conf);
+        tor_free(k);
+        tor_free(v);
+      } else {
+        /* This list can get long, so we keep a pointer to the end of it
+         * rather than using config_line_append over and over and getting
+         * n^2 performance. */
+        config_line_t *next = tor_malloc_zero(sizeof(*next));
+        next->key = k;
+        next->value = v;
+        next->next = NULL;
+        next->command = command;
+
+        if (!list) {
+          list = next;
+          list_last = list;
+        } else {
+          list_last->next = next;
+          list_last = next;
+        }
+      }
     } else {
       tor_free(k);
       tor_free(v);
     }
   } while (*string);
 
+  if (last) {
+    *last = list_last;
+  }
   *result = list;
   return 0;
+}
+
+/** Helper: parse the config string and strdup into key/value
+ * strings. Set *result to the list, or NULL if parsing the string
+ * failed.  Return 0 on success, -1 on failure. Warn and ignore any
+ * misformatted lines.
+ *
+ * If <b>extended</b> is set, then treat keys beginning with / and with + as
+ * indicating "clear" and "append" respectively. */
+int
+config_get_lines(const char *string, config_line_t **result, int extended)
+{
+    return config_get_lines_aux(string, result, extended, 1, NULL);
 }
 
 /**

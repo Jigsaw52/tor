@@ -102,6 +102,8 @@ typedef struct config_format_t {
 #define CAL_CLEAR_FIRST       (1u<<1)
 #define CAL_WARN_DEPRECATIONS (1u<<2)
 
+#define MAX_INCLUDE_RECURSION_LEVEL 31
+
 void *config_new(const config_format_t *fmt);
 void config_line_append(config_line_t **lst,
                         const char *key, const char *val);
