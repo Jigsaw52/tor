@@ -134,7 +134,8 @@ const char *config_find_deprecation(const config_format_t *fmt,
 const config_var_t *config_find_option(const config_format_t *fmt,
                                        const char *key);
 
-int config_get_lines(const char *string, config_line_t **result, int extended);
+int config_get_lines(const char *string, config_line_t **result, int extended,
+                     int *has_include);
 void config_free_lines(config_line_t *front);
 const char *config_expand_abbrev(const config_format_t *fmt,
                                  const char *option,

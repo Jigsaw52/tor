@@ -579,7 +579,7 @@ test_entry_guard_parse_from_state_full(void *arg)
 
   config_line_t *lines = NULL;
   or_state_t *state = tor_malloc_zero(sizeof(or_state_t));
-  int r = config_get_lines(STATE, &lines, 0);
+  int r = config_get_lines(STATE, &lines, 0, NULL);
   char *msg = NULL;
   smartlist_t *text = smartlist_new();
   char *joined = NULL;
@@ -718,7 +718,7 @@ test_entry_guard_parse_from_state_broken(void *arg)
 
   config_line_t *lines = NULL;
   or_state_t *state = tor_malloc_zero(sizeof(or_state_t));
-  int r = config_get_lines(STATE, &lines, 0);
+  int r = config_get_lines(STATE, &lines, 0, NULL);
   char *msg = NULL;
 
   dummy_state = state;

@@ -34,8 +34,8 @@ static void config_reset(const config_format_t *fmt, void *options,
 static config_line_t *config_lines_dup_and_filter(const config_line_t *inp,
                                                   const char *key);
 static int config_get_lines_aux(const char *string, config_line_t **result,
-                                int extended, int recursion_level,
-                                config_line_t **last);
+                                int extended, int *has_include,
+                                int recursion_level, config_line_t **last);
 
 /** Allocate an empty configuration object of a given format type. */
 void *
@@ -123,11 +123,13 @@ config_line_find(const config_line_t *lines,
  * <b>last</b>. */
 int
 config_get_lines_aux(const char *string, config_line_t **result, int extended,
-                     int recursion_level, config_line_t **last)
+                     int *has_include, int recursion_level,
+                     config_line_t **last)
 {
   config_line_t *list = NULL, *list_last = NULL;
   char *k, *v;
   const char *parse_err;
+  int include_used = 0;
 
   if (recursion_level > MAX_INCLUDE_RECURSION_LEVEL) {
     log_warn(LD_CONFIG, "Error while parsing configuration: more than %d "
@@ -178,7 +180,8 @@ config_get_lines_aux(const char *string, config_line_t **result, int extended,
         config_line_t *included_list = NULL;
         config_line_t *included_list_last = NULL;
         if (config_get_lines_aux(included_conf, &included_list, extended,
-                                 recursion_level+1, &included_list_last) < 0) {
+                                 has_include, recursion_level + 1,
+                                 &included_list_last) < 0) {
           log_warn(LD_CONFIG, "Error parsing included configuration "
                    "file: \"%s\".", v);
           config_free_lines(list);
@@ -194,6 +197,10 @@ config_get_lines_aux(const char *string, config_line_t **result, int extended,
         } else if (included_list) {
           list_last->next = included_list;
           list_last = included_list_last;
+        }
+
+        if (included_list) {
+          include_used = 1;
         }
 
         tor_free(included_conf);
@@ -226,21 +233,26 @@ config_get_lines_aux(const char *string, config_line_t **result, int extended,
   if (last) {
     *last = list_last;
   }
+  if (has_include) {
+    *has_include = include_used;
+  }
   *result = list;
   return 0;
 }
 
 /** Helper: parse the config string and strdup into key/value
  * strings. Set *result to the list, or NULL if parsing the string
- * failed.  Return 0 on success, -1 on failure. Warn and ignore any
+ * failed. Set *has_include to 1 if <b>result</b> has values from
+ * %included files.  Return 0 on success, -1 on failure. Warn and ignore any
  * misformatted lines.
  *
  * If <b>extended</b> is set, then treat keys beginning with / and with + as
  * indicating "clear" and "append" respectively. */
 int
-config_get_lines(const char *string, config_line_t **result, int extended)
+config_get_lines(const char *string, config_line_t **result, int extended,
+                 int *has_include)
 {
-    return config_get_lines_aux(string, result, extended, 1, NULL);
+    return config_get_lines_aux(string, result, extended, has_include, 1, NULL);
 }
 
 /**

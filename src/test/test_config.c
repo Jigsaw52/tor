@@ -76,7 +76,7 @@ test_config_addressmap(void *arg)
           "MapAddress 6.6.6.6 www.infiniteloop.org\n"
           , sizeof(buf));
 
-  config_get_lines(buf, &(get_options_mutable()->AddressMap), 0);
+  config_get_lines(buf, &(get_options_mutable()->AddressMap), 0, NULL);
   config_register_addressmaps(get_options());
 
 /* Use old interface for now, so we don't need to rewrite the unit tests */
@@ -162,7 +162,7 @@ test_config_addressmap(void *arg)
           "MapAddress *.torproject.org 1.1.1.1\n"
           "MapAddress *.net 2.2.2.2\n"
           , sizeof(buf));
-  config_get_lines(buf, &(get_options_mutable()->AddressMap), 0);
+  config_get_lines(buf, &(get_options_mutable()->AddressMap), 0, NULL);
   config_register_addressmaps(get_options());
 
   strlcpy(address, "www.abc.com", sizeof(address));
@@ -189,7 +189,7 @@ test_config_addressmap(void *arg)
   config_free_lines(get_options_mutable()->AddressMap);
   addressmap_clear_configured();
   strlcpy(buf, "MapAddress * *.torserver.exit\n", sizeof(buf));
-  config_get_lines(buf, &(get_options_mutable()->AddressMap), 0);
+  config_get_lines(buf, &(get_options_mutable()->AddressMap), 0, NULL);
   config_register_addressmaps(get_options());
 
   strlcpy(address, "www.abc.com", sizeof(address));
