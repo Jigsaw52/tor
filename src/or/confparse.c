@@ -36,6 +36,7 @@ static config_line_t *config_lines_dup_and_filter(const config_line_t *inp,
 static int config_get_lines_aux(const char *string, config_line_t **result,
                                 int extended, int *has_include,
                                 int recursion_level, config_line_t **last);
+static int config_get_file_list(char *path, smartlist_t *file_list);
 
 /** Allocate an empty configuration object of a given format type. */
 void *
@@ -167,45 +168,65 @@ config_get_lines_aux(const char *string, config_line_t **result, int extended,
       }
 
       if (!strcmp(k, "%include")) {
-        char *included_conf = read_file_to_str(v, 0, NULL);
-        if (!included_conf) {
+        smartlist_t *config_files = smartlist_new();
+        if (config_get_file_list(v, config_files) < 0) {
           log_warn(LD_CONFIG, "Error reading included configuration "
-                   "file: \"%s\".", v);
+                   "directory: \"%s\".", v);
+          SMARTLIST_FOREACH(config_files, char *, f, tor_free(f));
+          smartlist_free(config_files);
           config_free_lines(list);
           tor_free(k);
           tor_free(v);
           return -1;
         }
 
-        config_line_t *included_list = NULL;
-        config_line_t *included_list_last = NULL;
-        if (config_get_lines_aux(included_conf, &included_list, extended,
-                                 has_include, recursion_level + 1,
-                                 &included_list_last) < 0) {
-          log_warn(LD_CONFIG, "Error parsing included configuration "
-                   "file: \"%s\".", v);
-          config_free_lines(list);
-          tor_free(included_conf);
-          tor_free(k);
-          tor_free(v);
-          return -1;
-        }
-
-        if (!list) {
-          list = included_list;
-          list_last = list;
-        } else if (included_list) {
-          list_last->next = included_list;
-          list_last = included_list_last;
-        }
-
-        if (included_list) {
-          include_used = 1;
-        }
-
-        tor_free(included_conf);
         tor_free(k);
         tor_free(v);
+
+        SMARTLIST_FOREACH_BEGIN(config_files, char *, config_file) {
+
+          char *included_conf = read_file_to_str(config_file, 0, NULL);
+          if (!included_conf) {
+            log_warn(LD_CONFIG, "Error reading included configuration "
+                     "file: \"%s\".", config_file);
+            SMARTLIST_FOREACH(config_files, char *, f, tor_free(f));
+            smartlist_free(config_files);
+            config_free_lines(list);
+            return -1;
+          }
+
+          config_line_t *included_list = NULL;
+          config_line_t *included_list_last = NULL;
+          if (config_get_lines_aux(included_conf, &included_list, extended,
+                                   has_include, recursion_level + 1,
+                                   &included_list_last) < 0) {
+            log_warn(LD_CONFIG, "Error parsing included configuration "
+                     "file: \"%s\".", config_file);
+            SMARTLIST_FOREACH(config_files, char *, f, tor_free(f));
+            smartlist_free(config_files);
+            config_free_lines(list);
+            tor_free(included_conf);
+            return -1;
+          }
+
+          if (!list) {
+            list = included_list;
+            list_last = list;
+          } else if (included_list) {
+            list_last->next = included_list;
+            list_last = included_list_last;
+          }
+
+          if (included_list) {
+            include_used = 1;
+          }
+
+          tor_free(included_conf);
+          tor_free(config_file);
+
+        } SMARTLIST_FOREACH_END(config_file);
+        smartlist_free(config_files);
+
       } else {
         /* This list can get long, so we keep a pointer to the end of it
          * rather than using config_line_append over and over and getting
@@ -252,8 +273,51 @@ int
 config_get_lines(const char *string, config_line_t **result, int extended,
                  int *has_include)
 {
-    return config_get_lines_aux(string, result, extended, has_include, 1, NULL);
+  return config_get_lines_aux(string, result, extended, has_include, 1, NULL);
 }
+
+
+int config_get_file_list(char *path, smartlist_t *file_list)
+{
+  file_status_t file_type = file_status(path);
+  if (file_type == FN_FILE) {
+    smartlist_add_strdup(file_list, path);
+    return 0;
+  } else if (file_type == FN_DIR) {
+    smartlist_t *all_files = tor_listdir(path);
+    if (!all_files) {
+      return -1;
+    }
+    smartlist_sort_strings(all_files);
+    SMARTLIST_FOREACH_BEGIN(all_files, char *, f) {
+      if (f[0] == '.') {
+        tor_free(f);
+        continue;
+      }
+
+      size_t fullname_len = (size_t) (strlen(path) + strlen(f) + 2);
+      char *fullname = tor_malloc_zero(fullname_len);
+      strlcat(fullname, path, fullname_len);
+      strlcat(fullname, PATH_SEPARATOR, fullname_len);
+      strlcat(fullname, f, fullname_len);
+      tor_free(f);
+
+      if (file_status(fullname) != FN_FILE) {
+        tor_free(fullname);
+        continue;
+      }
+      smartlist_add(file_list, fullname);
+    } SMARTLIST_FOREACH_END(f);
+    smartlist_free(all_files);
+    return 0;
+  } else if (file_type == FN_EMPTY) {
+      return 0;
+  } else {
+    return -1;
+  }
+}
+
+
 
 /**
  * Free all the configuration lines on the linked list <b>front</b>.
