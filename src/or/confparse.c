@@ -168,6 +168,7 @@ config_get_lines_aux(const char *string, config_line_t **result, int extended,
       }
 
       if (!strcmp(k, "%include")) {
+        include_used = 1;
         smartlist_t *config_files = smartlist_new();
         if (config_get_file_list(v, config_files) < 0) {
           log_warn(LD_CONFIG, "Error reading included configuration "
@@ -215,10 +216,6 @@ config_get_lines_aux(const char *string, config_line_t **result, int extended,
           } else if (included_list) {
             list_last->next = included_list;
             list_last = included_list_last;
-          }
-
-          if (included_list) {
-            include_used = 1;
           }
 
           tor_free(included_conf);
