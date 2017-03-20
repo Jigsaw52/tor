@@ -172,7 +172,7 @@ config_get_lines_aux(const char *string, config_line_t **result, int extended,
         smartlist_t *config_files = smartlist_new();
         if (config_get_file_list(v, config_files) < 0) {
           log_warn(LD_CONFIG, "Error reading included configuration "
-                   "directory: \"%s\".", v);
+                   "file or directory: \"%s\".", v);
           SMARTLIST_FOREACH(config_files, char *, f, tor_free(f));
           smartlist_free(config_files);
           config_free_lines(list);
@@ -273,7 +273,13 @@ config_get_lines(const char *string, config_line_t **result, int extended,
   return config_get_lines_aux(string, result, extended, has_include, 1, NULL);
 }
 
-
+/** Adds a list of configuration files present on <b>path</b> to
+ * <b>file_list</b>. <b>path</b> can be a file or a directory. If it is a file,
+ * only that file will be added to <b>file_list</b>. If it is a directory,
+ * all paths for files on that directory root (no recursion) except for files
+ * whose name starts with a dot will be added to <b>file_list</b>.
+ * Return 0 on success, -1 on failure. Ignores empty files.
+ */
 int config_get_file_list(char *path, smartlist_t *file_list)
 {
   file_status_t file_type = file_status(path);
