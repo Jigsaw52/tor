@@ -212,7 +212,7 @@ config_get_lines_aux(const char *string, config_line_t **result, int extended,
 
           if (!list) {
             list = included_list;
-            list_last = list;
+            list_last = included_list_last;
           } else if (included_list) {
             list_last->next = included_list;
             list_last = included_list_last;
