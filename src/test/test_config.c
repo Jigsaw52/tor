@@ -4929,6 +4929,186 @@ test_config_parse_log_severity(void *data)
   tor_free(severity);
 }
 
+static void
+test_config_include_limit(void *data)
+{
+  (void)data;
+  char *dir = tor_strdup(get_fname("test_include_limit"));
+  tt_ptr_op(dir, OP_NE, NULL);
+
+#ifdef _WIN32
+  tt_int_op(mkdir(dir), OP_EQ, 0);
+#else
+  tt_int_op(mkdir(dir, 0700), OP_EQ, 0);
+#endif
+
+  char torrc_path[PATH_MAX+1];
+  tor_snprintf(torrc_path, sizeof(torrc_path), "%s"PATH_SEPARATOR"torrc", dir);
+  char torrc_contents[1000];
+  tor_snprintf(torrc_contents, sizeof(torrc_contents), "%%include %s",
+               torrc_path);
+  tt_int_op(write_str_to_file(torrc_path, torrc_contents, 0), OP_EQ, 0);
+
+  config_line_t *result;
+  tt_int_op(config_get_lines(torrc_contents, &result, 0, NULL), OP_EQ, -1);
+
+ done:
+  tor_free(dir);
+}
+
+static void
+test_config_include_does_not_exist(void *data)
+{
+  (void)data;
+  char *dir = tor_strdup(get_fname("test_include_does_not_exist"));
+  tt_ptr_op(dir, OP_NE, NULL);
+
+#ifdef _WIN32
+  tt_int_op(mkdir(dir), OP_EQ, 0);
+#else
+  tt_int_op(mkdir(dir, 0700), OP_EQ, 0);
+#endif
+
+  char missing_path[PATH_MAX+1];
+  tor_snprintf(missing_path, sizeof(missing_path), "%s"PATH_SEPARATOR"missing",
+               dir);
+  char torrc_contents[1000];
+  tor_snprintf(torrc_contents, sizeof(torrc_contents), "%%include %s",
+               missing_path);
+
+  config_line_t *result;
+  tt_int_op(config_get_lines(torrc_contents, &result, 0, NULL), OP_EQ, -1);
+
+ done:
+  tor_free(dir);
+}
+
+static void
+test_config_include_error_in_included_file(void *data)
+{
+  (void)data;
+  char *dir = tor_strdup(get_fname("test_error_in_included_file"));
+  tt_ptr_op(dir, OP_NE, NULL);
+
+#ifdef _WIN32
+  tt_int_op(mkdir(dir), OP_EQ, 0);
+#else
+  tt_int_op(mkdir(dir, 0700), OP_EQ, 0);
+#endif
+
+  char invalid_path[PATH_MAX+1];
+  tor_snprintf(invalid_path, sizeof(invalid_path), "%s"PATH_SEPARATOR"invalid",
+               dir);
+  tt_int_op(write_str_to_file(invalid_path, "unclosed \"", 0), OP_EQ, 0);
+
+  char torrc_contents[1000];
+  tor_snprintf(torrc_contents, sizeof(torrc_contents), "%%include %s",
+               invalid_path);
+
+  config_line_t *result;
+  tt_int_op(config_get_lines(torrc_contents, &result, 0, NULL), OP_EQ, -1);
+
+ done:
+  tor_free(dir);
+}
+
+static void
+test_config_include_empty_file_folder(void *data)
+{
+  (void)data;
+  char *dir = tor_strdup(get_fname("test_include_empty_file_folder"));
+  tt_ptr_op(dir, OP_NE, NULL);
+
+#ifdef _WIN32
+  tt_int_op(mkdir(dir), OP_EQ, 0);
+#else
+  tt_int_op(mkdir(dir, 0700), OP_EQ, 0);
+#endif
+
+  char folder_path[PATH_MAX+1];
+  tor_snprintf(folder_path, sizeof(folder_path), "%s"PATH_SEPARATOR"empty_dir",
+               dir);
+#ifdef _WIN32
+  tt_int_op(mkdir(folder_path), OP_EQ, 0);
+#else
+  tt_int_op(mkdir(folder_path, 0700), OP_EQ, 0);
+#endif
+  char file_path[PATH_MAX+1];
+  tor_snprintf(file_path, sizeof(file_path), "%s"PATH_SEPARATOR"empty_file",
+               dir);
+  tt_int_op(write_str_to_file(file_path, "", 0), OP_EQ, 0);
+
+  char torrc_contents[1000];
+  tor_snprintf(torrc_contents, sizeof(torrc_contents),
+               "%%include %s\n"
+               "%%include %s\n",
+               folder_path, file_path);
+
+  config_line_t *result;
+  tt_int_op(config_get_lines(torrc_contents, &result, 0, NULL), OP_EQ, 0);
+  tt_ptr_op(result, OP_EQ, NULL);
+
+ done:
+  tor_free(dir);
+}
+
+static void
+test_config_include_recursion(void *data)
+{
+  (void)data;
+  char *dir = tor_strdup(get_fname("test_include_recursion"));
+  tt_ptr_op(dir, OP_NE, NULL);
+
+#ifdef _WIN32
+  tt_int_op(mkdir(dir), OP_EQ, 0);
+#else
+  tt_int_op(mkdir(dir, 0700), OP_EQ, 0);
+#endif
+
+  // TODO
+
+ done:
+  tor_free(dir);
+}
+
+static void
+test_config_include_recursion2(void *data)
+{
+  (void)data;
+  char *dir = tor_strdup(get_fname("test_include_recursion2"));
+  tt_ptr_op(dir, OP_NE, NULL);
+
+#ifdef _WIN32
+  tt_int_op(mkdir(dir), OP_EQ, 0);
+#else
+  tt_int_op(mkdir(dir, 0700), OP_EQ, 0);
+#endif
+
+  // TODO
+
+ done:
+  tor_free(dir);
+}
+
+static void
+test_config_include_folder_order(void *data)
+{
+  (void)data;
+  char *dir = tor_strdup(get_fname("test_include_folder_order"));
+  tt_ptr_op(dir, OP_NE, NULL);
+
+#ifdef _WIN32
+  tt_int_op(mkdir(dir), OP_EQ, 0);
+#else
+  tt_int_op(mkdir(dir, 0700), OP_EQ, 0);
+#endif
+
+  // TODO
+
+ done:
+  tor_free(dir);
+}
+
 #define CONFIG_TEST(name, flags)                          \
   { #name, test_config_ ## name, flags, NULL, NULL }
 
@@ -4956,6 +5136,13 @@ struct testcase_t config_tests[] = {
   CONFIG_TEST(parse_port_config__ports__server_options, 0),
   CONFIG_TEST(parse_port_config__ports__ports_given, 0),
   CONFIG_TEST(parse_log_severity, 0),
+  CONFIG_TEST(include_limit, 0),
+  CONFIG_TEST(include_does_not_exist, 0),
+  CONFIG_TEST(include_error_in_included_file, 0),
+  CONFIG_TEST(include_empty_file_folder, 0),
+  CONFIG_TEST(include_recursion, 0),
+  CONFIG_TEST(include_recursion2, 0),
+  CONFIG_TEST(include_folder_order, 0),
   END_OF_TESTCASES
 };
 
