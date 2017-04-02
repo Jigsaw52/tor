@@ -1465,7 +1465,7 @@ handle_control_saveconf(control_connection_t *conn, uint32_t len,
 
   int force = !strcmpstart(body, "FORCE");
   const or_options_t *options = get_options();
-  if ((!force && options->IncludeUsed) || options_save_current()<0) {
+  if ((!force && options->IncludeUsed) || options_save_current() < 0) {
     connection_write_str_to_buf(
       "551 Unable to write configuration to disk.\r\n", conn);
   } else {

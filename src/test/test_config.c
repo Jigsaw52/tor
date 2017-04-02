@@ -4933,6 +4933,8 @@ static void
 test_config_include_limit(void *data)
 {
   (void)data;
+
+  config_line_t *result = NULL;
   char *dir = tor_strdup(get_fname("test_include_limit"));
   tt_ptr_op(dir, OP_NE, NULL);
 
@@ -4948,8 +4950,6 @@ test_config_include_limit(void *data)
   tor_snprintf(torrc_contents, sizeof(torrc_contents), "%%include %s",
                torrc_path);
   tt_int_op(write_str_to_file(torrc_path, torrc_contents, 0), OP_EQ, 0);
-
-  config_line_t *result = NULL;
   tt_int_op(config_get_lines(torrc_contents, &result, 0, NULL), OP_EQ, -1);
 
  done:
@@ -4961,6 +4961,8 @@ static void
 test_config_include_does_not_exist(void *data)
 {
   (void)data;
+
+  config_line_t *result = NULL;
   char *dir = tor_strdup(get_fname("test_include_does_not_exist"));
   tt_ptr_op(dir, OP_NE, NULL);
 
@@ -4977,7 +4979,6 @@ test_config_include_does_not_exist(void *data)
   tor_snprintf(torrc_contents, sizeof(torrc_contents), "%%include %s",
                missing_path);
 
-  config_line_t *result = NULL;
   tt_int_op(config_get_lines(torrc_contents, &result, 0, NULL), OP_EQ, -1);
 
  done:
@@ -4989,6 +4990,8 @@ static void
 test_config_include_error_in_included_file(void *data)
 {
   (void)data;
+
+  config_line_t *result = NULL;
   char *dir = tor_strdup(get_fname("test_error_in_included_file"));
   tt_ptr_op(dir, OP_NE, NULL);
 
@@ -5007,7 +5010,6 @@ test_config_include_error_in_included_file(void *data)
   tor_snprintf(torrc_contents, sizeof(torrc_contents), "%%include %s",
                invalid_path);
 
-  config_line_t *result = NULL;
   tt_int_op(config_get_lines(torrc_contents, &result, 0, NULL), OP_EQ, -1);
 
  done:
@@ -5019,6 +5021,8 @@ static void
 test_config_include_empty_file_folder(void *data)
 {
   (void)data;
+
+  config_line_t *result = NULL;
   char *dir = tor_strdup(get_fname("test_include_empty_file_folder"));
   tt_ptr_op(dir, OP_NE, NULL);
 
@@ -5047,7 +5051,6 @@ test_config_include_empty_file_folder(void *data)
                "%%include %s\n",
                folder_path, file_path);
 
-  config_line_t *result = NULL;
   tt_int_op(config_get_lines(torrc_contents, &result, 0, NULL), OP_EQ, 0);
   tt_ptr_op(result, OP_EQ, NULL);
 
@@ -5060,6 +5063,8 @@ static void
 test_config_include_recursion(void *data)
 {
   (void)data;
+
+  config_line_t *result = NULL;
   char *dir = tor_strdup(get_fname("test_include_recursion"));
   tt_ptr_op(dir, OP_NE, NULL);
 
@@ -5095,7 +5100,6 @@ test_config_include_recursion(void *data)
     }
   }
 
-  config_line_t *result = NULL;;
   tt_int_op(config_get_lines(file_contents, &result, 0, NULL), OP_EQ, 0);
   tt_ptr_op(result, OP_NE, NULL);
 
@@ -5119,6 +5123,8 @@ static void
 test_config_include_recursion2(void *data)
 {
   (void)data;
+
+  config_line_t *result = NULL;
   char *dir = tor_strdup(get_fname("test_include_recursion2"));
   tt_ptr_op(dir, OP_NE, NULL);
 
@@ -5154,7 +5160,6 @@ test_config_include_recursion2(void *data)
     }
   }
 
-  config_line_t *result = NULL;;
   tt_int_op(config_get_lines(file_contents, &result, 0, NULL), OP_EQ, 0);
   tt_ptr_op(result, OP_NE, NULL);
 
@@ -5178,6 +5183,8 @@ static void
 test_config_include_folder_order(void *data)
 {
   (void)data;
+
+  config_line_t *result = NULL;
   char *dir = tor_strdup(get_fname("test_include_folder_order"));
   tt_ptr_op(dir, OP_NE, NULL);
 
@@ -5234,7 +5241,6 @@ test_config_include_folder_order(void *data)
                "%%include %s\n",
                torrcd);
 
-  config_line_t *result = NULL;;
   tt_int_op(config_get_lines(torrc_contents, &result, 0, NULL), OP_EQ, 0);
   tt_ptr_op(result, OP_NE, NULL);
 
@@ -5251,6 +5257,106 @@ test_config_include_folder_order(void *data)
 
  done:
   config_free_lines(result);
+  tor_free(dir);
+}
+
+static void
+test_config_has_include_flag(void *data)
+{
+  (void)data;
+
+  char *errmsg = NULL;
+  char conf_empty[1000];
+  tor_snprintf(conf_empty, sizeof(conf_empty),
+               "DataDirectory %s\n",
+               get_fname(NULL));
+  // test with defaults-torrc and torrc without include
+  int ret = options_init_from_string(conf_empty, conf_empty, CMD_RUN_UNITTESTS,
+                                     NULL, &errmsg);
+  tt_int_op(ret, OP_EQ, 0);
+
+  const or_options_t *options = get_options();
+  tt_int_op(options->IncludeUsed, OP_EQ, 0);
+
+ done:
+  tor_free(errmsg);
+}
+
+static void
+test_config_has_include_flag2(void *data)
+{
+  (void)data;
+
+  char *errmsg = NULL;
+  char *dir = tor_strdup(get_fname("test_has_include_flag2"));
+  tt_ptr_op(dir, OP_NE, NULL);
+
+#ifdef _WIN32
+  tt_int_op(mkdir(dir), OP_EQ, 0);
+#else
+  tt_int_op(mkdir(dir, 0700), OP_EQ, 0);
+#endif
+
+  char path[PATH_MAX+1];
+  tor_snprintf(path, sizeof(path), "%s"PATH_SEPARATOR"%s", dir, "dummy");
+  tt_int_op(write_str_to_file(path, "\n", 0), OP_EQ, 0);
+
+  char conf_empty[1000];
+  tor_snprintf(conf_empty, sizeof(conf_empty),
+               "DataDirectory %s\n",
+               get_fname(NULL));
+  char conf_include[1000];
+  tor_snprintf(conf_include, sizeof(conf_include), "%%include %s", path);
+
+  // test with defaults-torrc without include and torrc with include
+  int ret = options_init_from_string(conf_empty, conf_include,
+                                     CMD_RUN_UNITTESTS, NULL, &errmsg);
+  tt_int_op(ret, OP_EQ, 0);
+
+  const or_options_t *options = get_options();
+  tt_int_op(options->IncludeUsed, OP_EQ, 1);
+
+ done:
+  tor_free(errmsg);
+  tor_free(dir);
+}
+
+static void
+test_config_has_include_flag3(void *data)
+{
+  (void)data;
+
+  char *errmsg = NULL;
+  char *dir = tor_strdup(get_fname("test_has_include_flag3"));
+  tt_ptr_op(dir, OP_NE, NULL);
+
+#ifdef _WIN32
+  tt_int_op(mkdir(dir), OP_EQ, 0);
+#else
+  tt_int_op(mkdir(dir, 0700), OP_EQ, 0);
+#endif
+
+  char path[PATH_MAX+1];
+  tor_snprintf(path, sizeof(path), "%s"PATH_SEPARATOR"%s", dir, "dummy");
+  tt_int_op(write_str_to_file(path, "\n", 0), OP_EQ, 0);
+
+  char conf_empty[1000];
+  tor_snprintf(conf_empty, sizeof(conf_empty),
+               "DataDirectory %s\n",
+               get_fname(NULL));
+  char conf_include[1000];
+  tor_snprintf(conf_include, sizeof(conf_include), "%%include %s", path);
+
+  // test with defaults-torrc with include and torrc without include
+  int ret = options_init_from_string(conf_include, conf_empty,
+                                     CMD_RUN_UNITTESTS, NULL, &errmsg);
+  tt_int_op(ret, OP_EQ, 0);
+
+  const or_options_t *options = get_options();
+  tt_int_op(options->IncludeUsed, OP_EQ, 0);
+
+ done:
+  tor_free(errmsg);
   tor_free(dir);
 }
 
@@ -5288,6 +5394,9 @@ struct testcase_t config_tests[] = {
   CONFIG_TEST(include_recursion, 0),
   CONFIG_TEST(include_recursion2, 0),
   CONFIG_TEST(include_folder_order, 0),
+  CONFIG_TEST(has_include_flag, TT_FORK),
+  CONFIG_TEST(has_include_flag2, TT_FORK),
+  CONFIG_TEST(has_include_flag3, TT_FORK),
   END_OF_TESTCASES
 };
 
