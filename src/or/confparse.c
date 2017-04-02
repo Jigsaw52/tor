@@ -280,7 +280,8 @@ config_get_lines(const char *string, config_line_t **result, int extended,
  * whose name starts with a dot will be added to <b>file_list</b>.
  * Return 0 on success, -1 on failure. Ignores empty files.
  */
-int config_get_file_list(char *path, smartlist_t *file_list)
+int
+config_get_file_list(char *path, smartlist_t *file_list)
 {
   file_status_t file_type = file_status(path);
   if (file_type == FN_FILE) {
@@ -319,8 +320,6 @@ int config_get_file_list(char *path, smartlist_t *file_list)
     return -1;
   }
 }
-
-
 
 /**
  * Free all the configuration lines on the linked list <b>front</b>.

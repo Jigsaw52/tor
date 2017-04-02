@@ -5198,7 +5198,8 @@ test_config_include_folder_order(void *data)
 
   // test that files in subfolders are ignored
   char path[PATH_MAX+1];
-  tor_snprintf(path, sizeof(path), "%s"PATH_SEPARATOR"%s", torrcd, "subfolder");
+  tor_snprintf(path, sizeof(path), "%s"PATH_SEPARATOR"%s", torrcd,
+               "subfolder");
 
 #ifdef _WIN32
   tt_int_op(mkdir(path), OP_EQ, 0);
@@ -5207,7 +5208,8 @@ test_config_include_folder_order(void *data)
 #endif
 
   char path2[PATH_MAX+1];
-  tor_snprintf(path2, sizeof(path2), "%s"PATH_SEPARATOR"%s", path, "01_ignore");
+  tor_snprintf(path2, sizeof(path2), "%s"PATH_SEPARATOR"%s", path,
+               "01_ignore");
   tt_int_op(write_str_to_file(path2, "ShouldNotSee 1\n", 0), OP_EQ, 0);
 
   // test that files starting with . are ignored
