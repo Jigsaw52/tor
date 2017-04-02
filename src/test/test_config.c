@@ -5187,9 +5187,68 @@ test_config_include_folder_order(void *data)
   tt_int_op(mkdir(dir, 0700), OP_EQ, 0);
 #endif
 
-  // TODO
+  char torrcd[PATH_MAX+1];
+  tor_snprintf(torrcd, sizeof(torrcd), "%s"PATH_SEPARATOR"%s", dir, "torrc.d");
+
+#ifdef _WIN32
+  tt_int_op(mkdir(torrcd), OP_EQ, 0);
+#else
+  tt_int_op(mkdir(torrcd, 0700), OP_EQ, 0);
+#endif
+
+  // test that files in subfolders are ignored
+  char path[PATH_MAX+1];
+  tor_snprintf(path, sizeof(path), "%s"PATH_SEPARATOR"%s", torrcd, "subfolder");
+
+#ifdef _WIN32
+  tt_int_op(mkdir(path), OP_EQ, 0);
+#else
+  tt_int_op(mkdir(path, 0700), OP_EQ, 0);
+#endif
+
+  char path2[PATH_MAX+1];
+  tor_snprintf(path2, sizeof(path2), "%s"PATH_SEPARATOR"%s", path, "01_ignore");
+  tt_int_op(write_str_to_file(path2, "ShouldNotSee 1\n", 0), OP_EQ, 0);
+
+  // test that files starting with . are ignored
+  tor_snprintf(path, sizeof(path), "%s"PATH_SEPARATOR"%s", torrcd, ".dot");
+  tt_int_op(write_str_to_file(path, "ShouldNotSee 2\n", 0), OP_EQ, 0);
+
+  // test file order
+  tor_snprintf(path, sizeof(path), "%s"PATH_SEPARATOR"%s", torrcd, "01_1st");
+  tt_int_op(write_str_to_file(path, "Test 1\n", 0), OP_EQ, 0);
+
+  tor_snprintf(path, sizeof(path), "%s"PATH_SEPARATOR"%s", torrcd, "02_2nd");
+  tt_int_op(write_str_to_file(path, "Test 2\n", 0), OP_EQ, 0);
+
+  tor_snprintf(path, sizeof(path), "%s"PATH_SEPARATOR"%s", torrcd, "aa_3rd");
+  tt_int_op(write_str_to_file(path, "Test 3\n", 0), OP_EQ, 0);
+
+  tor_snprintf(path, sizeof(path), "%s"PATH_SEPARATOR"%s", torrcd, "ab_4th");
+  tt_int_op(write_str_to_file(path, "Test 4\n", 0), OP_EQ, 0);
+
+  char torrc_contents[1000];
+  tor_snprintf(torrc_contents, sizeof(torrc_contents),
+               "%%include %s\n",
+               torrcd);
+
+  config_line_t *result = NULL;;
+  tt_int_op(config_get_lines(torrc_contents, &result, 0, NULL), OP_EQ, 0);
+  tt_ptr_op(result, OP_NE, NULL);
+
+  int len = 0;
+  config_line_t *next;
+  for (next = result; next != NULL; next = next->next) {
+    char expected[10];
+    tor_snprintf(expected, sizeof(expected), "%d", len + 1);
+    tt_str_op(next->key, OP_EQ, "Test");
+    tt_str_op(next->value, OP_EQ, expected);
+    len++;
+  }
+  tt_int_op(len, OP_EQ, 4);
 
  done:
+  config_free_lines(result);
   tor_free(dir);
 }
 
