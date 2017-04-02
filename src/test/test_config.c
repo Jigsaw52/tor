@@ -4949,10 +4949,11 @@ test_config_include_limit(void *data)
                torrc_path);
   tt_int_op(write_str_to_file(torrc_path, torrc_contents, 0), OP_EQ, 0);
 
-  config_line_t *result;
+  config_line_t *result = NULL;
   tt_int_op(config_get_lines(torrc_contents, &result, 0, NULL), OP_EQ, -1);
 
  done:
+  config_free_lines(result);
   tor_free(dir);
 }
 
@@ -4976,10 +4977,11 @@ test_config_include_does_not_exist(void *data)
   tor_snprintf(torrc_contents, sizeof(torrc_contents), "%%include %s",
                missing_path);
 
-  config_line_t *result;
+  config_line_t *result = NULL;
   tt_int_op(config_get_lines(torrc_contents, &result, 0, NULL), OP_EQ, -1);
 
  done:
+  config_free_lines(result);
   tor_free(dir);
 }
 
@@ -5005,10 +5007,11 @@ test_config_include_error_in_included_file(void *data)
   tor_snprintf(torrc_contents, sizeof(torrc_contents), "%%include %s",
                invalid_path);
 
-  config_line_t *result;
+  config_line_t *result = NULL;
   tt_int_op(config_get_lines(torrc_contents, &result, 0, NULL), OP_EQ, -1);
 
  done:
+  config_free_lines(result);
   tor_free(dir);
 }
 
@@ -5044,11 +5047,12 @@ test_config_include_empty_file_folder(void *data)
                "%%include %s\n",
                folder_path, file_path);
 
-  config_line_t *result;
+  config_line_t *result = NULL;
   tt_int_op(config_get_lines(torrc_contents, &result, 0, NULL), OP_EQ, 0);
   tt_ptr_op(result, OP_EQ, NULL);
 
  done:
+  config_free_lines(result);
   tor_free(dir);
 }
 
@@ -5065,9 +5069,49 @@ test_config_include_recursion(void *data)
   tt_int_op(mkdir(dir, 0700), OP_EQ, 0);
 #endif
 
-  // TODO
+  char torrc_path[PATH_MAX+1];
+  tor_snprintf(torrc_path, sizeof(torrc_path), "%s"PATH_SEPARATOR"torrc", dir);
+
+  char file_contents[1000];
+  const int limit = MAX_INCLUDE_RECURSION_LEVEL;
+  int i;
+  // Loop backwards so file_contents has the contents of the first file by the
+  // end of the loop
+  for (i = limit; i > 0; i--) {
+    if (i < limit) {
+      tor_snprintf(file_contents, sizeof(file_contents),
+                   "Test %d\n"
+                   "%%include %s%d\n"
+                   "Test %d\n",
+                   i, torrc_path, i + 1, 2 * limit - i);
+    } else {
+      tor_snprintf(file_contents, sizeof(file_contents), "Test %d\n", i);
+    }
+
+    if (i > 1) {
+      char file_path[PATH_MAX+1];
+      tor_snprintf(file_path, sizeof(file_path), "%s%d", torrc_path, i);
+      tt_int_op(write_str_to_file(file_path, file_contents, 0), OP_EQ, 0);
+    }
+  }
+
+  config_line_t *result = NULL;;
+  tt_int_op(config_get_lines(file_contents, &result, 0, NULL), OP_EQ, 0);
+  tt_ptr_op(result, OP_NE, NULL);
+
+  int len = 0;
+  config_line_t *next;
+  for (next = result; next != NULL; next = next->next) {
+    char expected[10];
+    tor_snprintf(expected, sizeof(expected), "%d", len + 1);
+    tt_str_op(next->key, OP_EQ, "Test");
+    tt_str_op(next->value, OP_EQ, expected);
+    len++;
+  }
+  tt_int_op(len, OP_EQ, 2 * limit - 1);
 
  done:
+  config_free_lines(result);
   tor_free(dir);
 }
 
@@ -5084,9 +5128,49 @@ test_config_include_recursion2(void *data)
   tt_int_op(mkdir(dir, 0700), OP_EQ, 0);
 #endif
 
-  // TODO
+  char torrc_path[PATH_MAX+1];
+  tor_snprintf(torrc_path, sizeof(torrc_path), "%s"PATH_SEPARATOR"torrc", dir);
+
+  char file_contents[1000];
+  const int limit = MAX_INCLUDE_RECURSION_LEVEL;
+  int i;
+  // Loop backwards so file_contents has the contents of the first file by the
+  // end of the loop
+  for (i = limit; i > 0; i--) {
+    int n = (i - limit - 1) * -1;
+    if (i < limit) {
+      tor_snprintf(file_contents, sizeof(file_contents),
+                   "%%include %s%d\n"
+                   "Test %d\n",
+                   torrc_path, i + 1, n);
+    } else {
+      tor_snprintf(file_contents, sizeof(file_contents), "Test %d\n", n);
+    }
+
+    if (i > 1) {
+      char file_path[PATH_MAX+1];
+      tor_snprintf(file_path, sizeof(file_path), "%s%d", torrc_path, i);
+      tt_int_op(write_str_to_file(file_path, file_contents, 0), OP_EQ, 0);
+    }
+  }
+
+  config_line_t *result = NULL;;
+  tt_int_op(config_get_lines(file_contents, &result, 0, NULL), OP_EQ, 0);
+  tt_ptr_op(result, OP_NE, NULL);
+
+  int len = 0;
+  config_line_t *next;
+  for (next = result; next != NULL; next = next->next) {
+    char expected[10];
+    tor_snprintf(expected, sizeof(expected), "%d", len + 1);
+    tt_str_op(next->key, OP_EQ, "Test");
+    tt_str_op(next->value, OP_EQ, expected);
+    len++;
+  }
+  tt_int_op(len, OP_EQ, limit);
 
  done:
+  config_free_lines(result);
   tor_free(dir);
 }
 
