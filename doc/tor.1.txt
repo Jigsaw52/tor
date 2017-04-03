@@ -192,6 +192,9 @@ GENERAL OPTIONS
     course, more is better; we recommend at least 250 KBytes (2 mbits) if
     possible.  (Default: 1 GByte) +
  +
+    Note that this option, and other bandwidth-limiting options, apply to TCP
+    data only: They do not count TCP headers or DNS traffic. +
+ +
     With this option, and in other options that take arguments in bytes,
     KBytes, and so on, other formats are also supported. Notably, "KBytes" can
     also be written as "kilobytes" or "kb"; "MBytes" can be written as
@@ -398,7 +401,9 @@ GENERAL OPTIONS
 
 [[DataDirectory]] **DataDirectory** __DIR__::
     Store working data in DIR. Can not be changed while tor is running.
-    (Default: @LOCALSTATEDIR@/lib/tor)
+    (Default: ~/.tor if your home directory is not /; otherwise,
+    @LOCALSTATEDIR@/lib/tor.  On Windows, the default is
+    your ApplicationData folder.)
 
 [[DataDirectoryGroupReadable]] **DataDirectoryGroupReadable** **0**|**1**::
     If this option is set to 0, don't allow the filesystem group to read the
@@ -2128,8 +2133,9 @@ is non-zero):
 DIRECTORY SERVER OPTIONS
 ------------------------
 
-The following options are useful only for directory servers (that is,
-if DirPort is non-zero):
+The following options are useful only for directory servers. (Relays with
+enough bandwidth automatically become directory servers; see DirCache for
+details.)
 
 [[DirPortFrontPage]] **DirPortFrontPage** __FILENAME__::
     When this option is set, it takes an HTML file and publishes it as "/" on

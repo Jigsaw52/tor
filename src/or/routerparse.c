@@ -1,7 +1,7 @@
 /* Copyright (c) 2001 Matej Pfajfar.
  * Copyright (c) 2001-2004, Roger Dingledine.
  * Copyright (c) 2004-2006, Roger Dingledine, Nick Mathewson.
- * Copyright (c) 2007-2016, The Tor Project, Inc. */
+ * Copyright (c) 2007-2017, The Tor Project, Inc. */
 /* See LICENSE for licensing information */
 
 /**
@@ -2029,6 +2029,9 @@ extrainfo_parse_entry_from_string(const char *s, const char *end,
   /* Do not set this to '1' until we have parsed everything that we intend to
    * parse that's covered by the hash. */
   int can_dl_again = 0;
+
+  if (BUG(s == NULL))
+    return NULL;
 
   if (!end) {
     end = s + strlen(s);

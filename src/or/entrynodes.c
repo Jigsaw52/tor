@@ -1,7 +1,7 @@
 /* Copyright (c) 2001 Matej Pfajfar.
  * Copyright (c) 2001-2004, Roger Dingledine.
  * Copyright (c) 2004-2006, Roger Dingledine, Nick Mathewson.
- * Copyright (c) 2007-2016, The Tor Project, Inc. */
+ * Copyright (c) 2007-2017, The Tor Project, Inc. */
 /* See LICENSE for licensing information */
 
 /**
@@ -989,9 +989,11 @@ get_max_sample_size(guard_selection_t *gs,
   const int using_bridges = (gs->type == GS_TYPE_BRIDGE);
   const int min_sample = get_min_filtered_sample_size();
 
-  /* With bridges, max_sample is "all of them" */
+  /* If we are in bridge mode, expand our sample set as needed without worrying
+   * about max size. We should respect the user's wishes to use many bridges if
+   * that's what they have specified in their configuration file. */
   if (using_bridges)
-    return n_guards;
+    return INT_MAX;
 
   const int max_sample_by_pct = (int)(n_guards * get_max_sample_threshold());
   const int max_sample_absolute = get_max_sample_size_absolute();

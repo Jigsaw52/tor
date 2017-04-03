@@ -1,6 +1,6 @@
 /* Copyright (c) 2001-2004, Roger Dingledine.
  * Copyright (c) 2004-2006, Roger Dingledine, Nick Mathewson.
- * Copyright (c) 2007-2016, The Tor Project, Inc. */
+ * Copyright (c) 2007-2017, The Tor Project, Inc. */
 /* See LICENSE for licensing information */
 
 /**
@@ -1188,12 +1188,14 @@ struct testgroup_t testgroups[] = {
   { "channel/", channel_tests },
   { "channeltls/", channeltls_tests },
   { "checkdir/", checkdir_tests },
+  { "circuitbuild/", circuitbuild_tests },
   { "circuitlist/", circuitlist_tests },
   { "circuitmux/", circuitmux_tests },
   { "circuituse/", circuituse_tests },
   { "compat/libevent/", compat_libevent_tests },
   { "config/", config_tests },
   { "connection/", connection_tests },
+  { "consdiff/", consdiff_tests },
   { "container/", container_tests },
   { "control/", controller_tests },
   { "control/event/", controller_event_tests },
@@ -1232,6 +1234,7 @@ struct testgroup_t testgroups[] = {
   { "socks/", socks_tests },
   { "shared-random/", sr_tests },
   { "status/" , status_tests },
+  { "storagedir/", storagedir_tests },
   { "tortls/", tortls_tests },
   { "util/", util_tests },
   { "util/format/", util_format_tests },

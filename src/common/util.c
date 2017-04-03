@@ -1,6 +1,6 @@
 /* Copyright (c) 2003, Roger Dingledine
  * Copyright (c) 2004-2006, Roger Dingledine, Nick Mathewson.
- * Copyright (c) 2007-2016, The Tor Project, Inc. */
+ * Copyright (c) 2007-2017, The Tor Project, Inc. */
 /* See LICENSE for licensing information */
 
 /**
@@ -5270,7 +5270,7 @@ tor_get_lines_from_handle, (int fd, enum stream_status *stream_status_out))
       goto done;
 
     if (!lines) lines = smartlist_new();
-    smartlist_add_strdup(lines, stdout_buf);
+    smartlist_split_string(lines, stdout_buf, "\n", 0, 0);
   }
 
  done:

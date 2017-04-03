@@ -1,7 +1,7 @@
 /* Copyright (c) 2001 Matej Pfajfar.
  * Copyright (c) 2001-2004, Roger Dingledine.
  * Copyright (c) 2004-2006, Roger Dingledine, Nick Mathewson.
- * Copyright (c) 2007-2016, The Tor Project, Inc. */
+ * Copyright (c) 2007-2017, The Tor Project, Inc. */
 /* See LICENSE for licensing information */
 
 /**
@@ -238,7 +238,9 @@ onion_pending_add(or_circuit_t *circ, create_cell_t *onionskin)
     onion_queue_entry_remove(head);
     log_info(LD_CIRC,
              "Circuit create request is too old; canceling due to overload.");
-    circuit_mark_for_close(TO_CIRCUIT(circ), END_CIRC_REASON_RESOURCELIMIT);
+    if (! TO_CIRCUIT(circ)->marked_for_close) {
+      circuit_mark_for_close(TO_CIRCUIT(circ), END_CIRC_REASON_RESOURCELIMIT);
+    }
   }
   return 0;
 }

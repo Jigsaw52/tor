@@ -2,7 +2,7 @@
 /* Copyright (c) 2001 Matej Pfajfar.
  * Copyright (c) 2001-2004, Roger Dingledine.
  * Copyright (c) 2004-2006, Roger Dingledine, Nick Mathewson.
- * Copyright (c) 2007-2016, The Tor Project, Inc. */
+ * Copyright (c) 2007-2017, The Tor Project, Inc. */
 /* See LICENSE for licensing information */
 
 /**
@@ -924,6 +924,7 @@ config_get_assigned_option(const config_format_t *fmt, const void *options,
       tor_free(result);
       return NULL;
     case CONFIG_TYPE_LINELIST_S:
+      tor_free(result->key);
       tor_free(result);
       result = config_lines_dup_and_filter(*(const config_line_t **)value,
                                            key);

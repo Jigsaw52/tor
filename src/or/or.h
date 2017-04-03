@@ -1,7 +1,7 @@
 /* Copyright (c) 2001 Matej Pfajfar.
  * Copyright (c) 2001-2004, Roger Dingledine.
  * Copyright (c) 2004-2006, Roger Dingledine, Nick Mathewson.
- * Copyright (c) 2007-2016, The Tor Project, Inc. */
+ * Copyright (c) 2007-2017, The Tor Project, Inc. */
 /* See LICENSE for licensing information */
 
 /**
@@ -147,8 +147,27 @@
 /** Maximum size of a single extrainfo document, as above. */
 #define MAX_EXTRAINFO_UPLOAD_SIZE 50000
 
-/** How often do we rotate onion keys? */
-#define MIN_ONION_KEY_LIFETIME (7*24*60*60)
+/** Minimum lifetime for an onion key in days. */
+#define MIN_ONION_KEY_LIFETIME_DAYS (1)
+
+/** Maximum lifetime for an onion key in days. */
+#define MAX_ONION_KEY_LIFETIME_DAYS (90)
+
+/** Default lifetime for an onion key in days. */
+#define DEFAULT_ONION_KEY_LIFETIME_DAYS (28)
+
+/** Minimum grace period for acceptance of an onion key in days.
+ * The maximum value is defined in proposal #274 as being the current network
+ * consensus parameter for "onion-key-rotation-days". */
+#define MIN_ONION_KEY_GRACE_PERIOD_DAYS (1)
+
+/** Default grace period for acceptance of an onion key in days. */
+#define DEFAULT_ONION_KEY_GRACE_PERIOD_DAYS (7)
+
+/** How often we should check the network consensus if it is time to rotate or
+ * expire onion keys. */
+#define ONION_KEY_CONSENSUS_CHECK_INTERVAL (60*60)
+
 /** How often do we rotate TLS contexts? */
 #define MAX_SSL_KEY_LIFETIME_INTERNAL (2*60*60)
 
@@ -1732,14 +1751,6 @@ typedef struct entry_connection_t {
   unsigned int is_socks_socket:1;
 } entry_connection_t;
 
-typedef enum {
-    DIR_SPOOL_NONE=0, DIR_SPOOL_SERVER_BY_DIGEST, DIR_SPOOL_SERVER_BY_FP,
-    DIR_SPOOL_EXTRA_BY_DIGEST, DIR_SPOOL_EXTRA_BY_FP,
-    DIR_SPOOL_CACHED_DIR, DIR_SPOOL_NETWORKSTATUS,
-    DIR_SPOOL_MICRODESC, /* NOTE: if we add another entry, add another bit. */
-} dir_spool_source_t;
-#define dir_spool_source_bitfield_t ENUM_BF(dir_spool_source_t)
-
 /** Subtype of connection_t for an "directory connection" -- that is, an HTTP
  * connection to retrieve or serve directory material. */
 typedef struct dir_connection_t {
@@ -1754,21 +1765,13 @@ typedef struct dir_connection_t {
   char *requested_resource;
   unsigned int dirconn_direct:1; /**< Is this dirconn direct, or via Tor? */
 
-  /* Used only for server sides of some dir connections, to implement
-   * "spooling" of directory material to the outbuf.  Otherwise, we'd have
-   * to append everything to the outbuf in one enormous chunk. */
-  /** What exactly are we spooling right now? */
-  dir_spool_source_bitfield_t  dir_spool_src : 3;
-
   /** If we're fetching descriptors, what router purpose shall we assign
    * to them? */
   uint8_t router_purpose;
-  /** List of fingerprints for networkstatuses or descriptors to be spooled. */
-  smartlist_t *fingerprint_stack;
-  /** A cached_dir_t object that we're currently spooling out */
-  struct cached_dir_t *cached_dir;
-  /** The current offset into cached_dir. */
-  off_t cached_dir_offset;
+
+  /** List of spooled_resource_t for objects that we're spooling. We use
+   * it from back to front. */
+  smartlist_t *spool;
   /** The zlib object doing on-the-fly compression for spooled data. */
   tor_zlib_state_t *zlib_state;
 

@@ -1,6 +1,6 @@
 /* Copyright (c) 2001-2004, Roger Dingledine.
  * Copyright (c) 2004-2006, Roger Dingledine, Nick Mathewson.
- * Copyright (c) 2007-2016, The Tor Project, Inc. */
+ * Copyright (c) 2007-2017, The Tor Project, Inc. */
 /* See LICENSE for licensing information */
 
 #include "orconfig.h"
@@ -4027,6 +4027,16 @@ test_util_string_from_pipe(void *ptr)
   tt_int_op(status, OP_EQ, IO_STREAM_OKAY);
   tt_str_op(buf, OP_EQ, "B");
   tt_mem_op(buf, OP_EQ, "B\0\xff\xff", sizeof(buf));
+  errno = 0;
+
+  /* Send in multiple lines. */
+  retlen = write(test_pipe[1], "A\nB", 3);
+  tt_int_op(retlen, OP_EQ, 3);
+
+  status = get_string_from_pipe(test_pipe[0], buf, sizeof(buf)-1);
+  tt_int_op(errno, OP_EQ, 0);
+  tt_int_op(status, OP_EQ, IO_STREAM_OKAY);
+  tt_str_op(buf, OP_EQ, "A\nB");
   errno = 0;
 
   /* Send in a line and close */

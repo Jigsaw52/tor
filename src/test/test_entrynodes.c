@@ -1,4 +1,4 @@
-/* Copyright (c) 2014-2016, The Tor Project, Inc. */
+/* Copyright (c) 2014-2017, The Tor Project, Inc. */
 /* See LICENSE for licensing information */
 
 #include "orconfig.h"
@@ -583,6 +583,9 @@ test_entry_guard_parse_from_state_full(void *arg)
   char *msg = NULL;
   smartlist_t *text = smartlist_new();
   char *joined = NULL;
+
+  // So nodes aren't expired. This is Tue, 13 Dec 2016 09:37:14 GMT
+  update_approx_time(1481621834);
 
   MOCK(entry_guard_is_listed, mock_entry_guard_is_listed);
 

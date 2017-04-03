@@ -1,7 +1,7 @@
 /* Copyright (c) 2001 Matej Pfajfar.
  * Copyright (c) 2001-2004, Roger Dingledine.
  * Copyright (c) 2004-2006, Roger Dingledine, Nick Mathewson.
- * Copyright (c) 2007-2016, The Tor Project, Inc. */
+ * Copyright (c) 2007-2017, The Tor Project, Inc. */
 /* See LICENSE for licensing information */
 
 /**
@@ -2347,7 +2347,7 @@ print_usage(void)
   printf(
 "Copyright (c) 2001-2004, Roger Dingledine\n"
 "Copyright (c) 2004-2006, Roger Dingledine, Nick Mathewson\n"
-"Copyright (c) 2007-2016, The Tor Project, Inc.\n\n"
+"Copyright (c) 2007-2017, The Tor Project, Inc.\n\n"
 "tor -f <torrc> [args]\n"
 "See man page for options, or https://www.torproject.org/ for "
 "documentation.\n");
@@ -2815,7 +2815,7 @@ compute_publishserverdescriptor(or_options_t *options)
 #define MAX_PREDICTED_CIRCS_RELEVANCE (60*60)
 
 /** Highest allowable value for RendPostPeriod. */
-#define MAX_DIR_PERIOD (MIN_ONION_KEY_LIFETIME/2)
+#define MAX_DIR_PERIOD ((7*24*60*60)/2)
 
 /** Lowest allowable value for MaxCircuitDirtiness; if this is too low, Tor
  * will generate too many circuits and potentially overload the network. */

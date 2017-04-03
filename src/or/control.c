@@ -1,5 +1,5 @@
 /* Copyright (c) 2004-2006, Roger Dingledine, Nick Mathewson.
- * Copyright (c) 2007-2016, The Tor Project, Inc. */
+ * Copyright (c) 2007-2017, The Tor Project, Inc. */
 /* See LICENSE for licensing information */
 
 /**
@@ -2051,6 +2051,12 @@ getinfo_helper_dir(control_connection_t *control_conn,
       }
     }
   } else if (!strcmp(question, "network-status")) { /* v1 */
+    static int network_status_warned = 0;
+    if (!network_status_warned) {
+      log_warn(LD_CONTROL, "GETINFO network-status is deprecated; it will "
+               "go away in a future version of Tor.");
+      network_status_warned = 1;
+    }
     routerlist_t *routerlist = router_get_routerlist();
     if (!routerlist || !routerlist->routers ||
         list_server_status_v1(routerlist->routers, answer, 1) < 0) {
