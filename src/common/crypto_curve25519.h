@@ -74,6 +74,7 @@ STATIC int curve25519_basepoint_impl(uint8_t *output, const uint8_t *secret);
 #endif
 
 #define CURVE25519_BASE64_PADDED_LEN 44
+#define CURVE25519_BASE64_UNPADDED_LEN (CURVE25519_BASE64_PADDED_LEN-1)
 
 int curve25519_public_from_base64(curve25519_public_key_t *pkey,
                                   const char *input);

@@ -407,7 +407,7 @@ static const char test_md_16[] =
   "st7WvrVy/jA9v/fsezNAPskBanecHRSkdMTpkcgRPMHE7CTGEwIy1Yp1X4bPgDlC\n"
   "VCnbs5Pcts5HnWEYNK7qHDAUn+IlmjOO+pTUY8uyq+GQVz6H9wFlAgMBAAE=\n"
   "-----END RSA PUBLIC KEY-----\n"
-  "ntor-onion-key Gg73xH7+kTfT6bi1uNVx9gwQdQas9pROIfmc4NpAdC4=\n"
+  "ntor-onion-key Gg73xH7+kTfT6bi1uNVx9gwQdQas9pROIfmc4NpAdC4\n"
   "p reject 25,119,135-139,445,563,1214,4661-4666,6346-6429,6699,6881-6999\n";
 
 static const char test_md_18[] =
@@ -417,7 +417,7 @@ static const char test_md_18[] =
   "st7WvrVy/jA9v/fsezNAPskBanecHRSkdMTpkcgRPMHE7CTGEwIy1Yp1X4bPgDlC\n"
   "VCnbs5Pcts5HnWEYNK7qHDAUn+IlmjOO+pTUY8uyq+GQVz6H9wFlAgMBAAE=\n"
   "-----END RSA PUBLIC KEY-----\n"
-  "ntor-onion-key Gg73xH7+kTfT6bi1uNVx9gwQdQas9pROIfmc4NpAdC4=\n"
+  "ntor-onion-key Gg73xH7+kTfT6bi1uNVx9gwQdQas9pROIfmc4NpAdC4\n"
   "p reject 25,119,135-139,445,563,1214,4661-4666,6346-6429,6699,6881-6999\n"
   "id rsa1024 Cd47okjCHD83YGzThGBDptXs9Z4\n";
 
@@ -428,7 +428,7 @@ static const char test_md2_18[] =
   "+YQnJFxlpBmCoCZC6ssCi+9G0mqo650lFuTMP5I90BdtjotfzESfTykHLiChyvhd\n"
   "l0dlqclb2SU/GKem/fLRXH16aNi72CdSUu/1slKs/70ILi34QixRAgMBAAE=\n"
   "-----END RSA PUBLIC KEY-----\n"
-  "ntor-onion-key hbxdRnfVUJJY7+KcT4E3Rs7/zuClbN3hJrjSBiEGMgI=\n"
+  "ntor-onion-key hbxdRnfVUJJY7+KcT4E3Rs7/zuClbN3hJrjSBiEGMgI\n"
   "id rsa1024 t+J/EEITw28T5+mCkYKEXklZl6A\n";
 
 static const char test_md2_21[] =
@@ -438,7 +438,7 @@ static const char test_md2_21[] =
   "+YQnJFxlpBmCoCZC6ssCi+9G0mqo650lFuTMP5I90BdtjotfzESfTykHLiChyvhd\n"
   "l0dlqclb2SU/GKem/fLRXH16aNi72CdSUu/1slKs/70ILi34QixRAgMBAAE=\n"
   "-----END RSA PUBLIC KEY-----\n"
-  "ntor-onion-key hbxdRnfVUJJY7+KcT4E3Rs7/zuClbN3hJrjSBiEGMgI=\n"
+  "ntor-onion-key hbxdRnfVUJJY7+KcT4E3Rs7/zuClbN3hJrjSBiEGMgI\n"
   "id ed25519 wqfLzgfCtRfYNg88LsL1QpzxS0itapJ1aj6TbnByx/Q\n";
 
 static void
