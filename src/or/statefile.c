@@ -366,7 +366,7 @@ or_state_load(void)
   if (contents) {
     config_line_t *lines=NULL;
     int assign_retval;
-    if (config_get_lines(contents, &lines, 0)<0)
+    if (config_get_lines(contents, &lines, 0, NULL)<0)
       goto done;
     assign_retval = config_assign(&state_format, new_state,
                                   lines, 0, &errmsg);

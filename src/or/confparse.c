@@ -33,6 +33,10 @@ static void config_reset(const config_format_t *fmt, void *options,
                          const config_var_t *var, int use_defaults);
 static config_line_t *config_lines_dup_and_filter(const config_line_t *inp,
                                                   const char *key);
+static int config_get_lines_aux(const char *string, config_line_t **result,
+                                int extended, int *has_include,
+                                int recursion_level, config_line_t **last);
+static int config_get_file_list(char *path, smartlist_t *file_list);
 
 /** Allocate an empty configuration object of a given format type. */
 void *
@@ -114,21 +118,26 @@ config_line_find(const config_line_t *lines,
   return NULL;
 }
 
-/** Helper: parse the config string and strdup into key/value
- * strings. Set *result to the list, or NULL if parsing the string
- * failed.  Return 0 on success, -1 on failure. Warn and ignore any
- * misformatted lines.
- *
- * If <b>extended</b> is set, then treat keys beginning with / and with + as
- * indicating "clear" and "append" respectively. */
+/** Auxiliary function that does all the work of config_get_lines.
+ * <b>recursion_level</b> is the count of how many nested %includes we have.
+ * Returns the a pointer to the last element of the <b>result</b> in
+ * <b>last</b>. */
 int
-config_get_lines(const char *string, config_line_t **result, int extended)
+config_get_lines_aux(const char *string, config_line_t **result, int extended,
+                     int *has_include, int recursion_level,
+                     config_line_t **last)
 {
-  config_line_t *list = NULL, **next;
+  config_line_t *list = NULL, *list_last = NULL;
   char *k, *v;
   const char *parse_err;
+  int include_used = 0;
 
-  next = &list;
+  if (recursion_level > MAX_INCLUDE_RECURSION_LEVEL) {
+    log_warn(LD_CONFIG, "Error while parsing configuration: more than %d "
+             "nested %%includes.", MAX_INCLUDE_RECURSION_LEVEL);
+    return -1;
+  }
+
   do {
     k = v = NULL;
     string = parse_config_line_from_str_verbose(string, &k, &v, &parse_err);
@@ -157,23 +166,159 @@ config_get_lines(const char *string, config_line_t **result, int extended)
           command = CONFIG_LINE_CLEAR;
         }
       }
-      /* This list can get long, so we keep a pointer to the end of it
-       * rather than using config_line_append over and over and getting
-       * n^2 performance. */
-      *next = tor_malloc_zero(sizeof(config_line_t));
-      (*next)->key = k;
-      (*next)->value = v;
-      (*next)->next = NULL;
-      (*next)->command = command;
-      next = &((*next)->next);
+
+      if (!strcmp(k, "%include")) {
+        include_used = 1;
+        smartlist_t *config_files = smartlist_new();
+        if (config_get_file_list(v, config_files) < 0) {
+          log_warn(LD_CONFIG, "Error reading included configuration "
+                   "file or directory: \"%s\".", v);
+          SMARTLIST_FOREACH(config_files, char *, f, tor_free(f));
+          smartlist_free(config_files);
+          config_free_lines(list);
+          tor_free(k);
+          tor_free(v);
+          return -1;
+        }
+
+        tor_free(k);
+        tor_free(v);
+
+        SMARTLIST_FOREACH_BEGIN(config_files, char *, config_file) {
+
+          char *included_conf = read_file_to_str(config_file, 0, NULL);
+          if (!included_conf) {
+            log_warn(LD_CONFIG, "Error reading included configuration "
+                     "file: \"%s\".", config_file);
+            SMARTLIST_FOREACH(config_files, char *, f, tor_free(f));
+            smartlist_free(config_files);
+            config_free_lines(list);
+            return -1;
+          }
+
+          config_line_t *included_list = NULL;
+          config_line_t *included_list_last = NULL;
+          if (config_get_lines_aux(included_conf, &included_list, extended,
+                                   has_include, recursion_level + 1,
+                                   &included_list_last) < 0) {
+            log_warn(LD_CONFIG, "Error parsing included configuration "
+                     "file: \"%s\".", config_file);
+            SMARTLIST_FOREACH(config_files, char *, f, tor_free(f));
+            smartlist_free(config_files);
+            config_free_lines(list);
+            tor_free(included_conf);
+            return -1;
+          }
+
+          if (!list) {
+            list = included_list;
+            list_last = included_list_last;
+          } else if (included_list) {
+            list_last->next = included_list;
+            list_last = included_list_last;
+          }
+
+          tor_free(included_conf);
+          tor_free(config_file);
+
+        } SMARTLIST_FOREACH_END(config_file);
+        smartlist_free(config_files);
+
+      } else {
+        /* This list can get long, so we keep a pointer to the end of it
+         * rather than using config_line_append over and over and getting
+         * n^2 performance. */
+        config_line_t *next = tor_malloc_zero(sizeof(*next));
+        next->key = k;
+        next->value = v;
+        next->next = NULL;
+        next->command = command;
+
+        if (!list) {
+          list = next;
+          list_last = list;
+        } else {
+          list_last->next = next;
+          list_last = next;
+        }
+      }
     } else {
       tor_free(k);
       tor_free(v);
     }
   } while (*string);
 
+  if (last) {
+    *last = list_last;
+  }
+  if (has_include) {
+    *has_include = include_used;
+  }
   *result = list;
   return 0;
+}
+
+/** Helper: parse the config string and strdup into key/value
+ * strings. Set *result to the list, or NULL if parsing the string
+ * failed. Set *has_include to 1 if <b>result</b> has values from
+ * %included files.  Return 0 on success, -1 on failure. Warn and ignore any
+ * misformatted lines.
+ *
+ * If <b>extended</b> is set, then treat keys beginning with / and with + as
+ * indicating "clear" and "append" respectively. */
+int
+config_get_lines(const char *string, config_line_t **result, int extended,
+                 int *has_include)
+{
+  return config_get_lines_aux(string, result, extended, has_include, 1, NULL);
+}
+
+/** Adds a list of configuration files present on <b>path</b> to
+ * <b>file_list</b>. <b>path</b> can be a file or a directory. If it is a file,
+ * only that file will be added to <b>file_list</b>. If it is a directory,
+ * all paths for files on that directory root (no recursion) except for files
+ * whose name starts with a dot will be added to <b>file_list</b>.
+ * Return 0 on success, -1 on failure. Ignores empty files.
+ */
+int
+config_get_file_list(char *path, smartlist_t *file_list)
+{
+  file_status_t file_type = file_status(path);
+  if (file_type == FN_FILE) {
+    smartlist_add_strdup(file_list, path);
+    return 0;
+  } else if (file_type == FN_DIR) {
+    smartlist_t *all_files = tor_listdir(path);
+    if (!all_files) {
+      return -1;
+    }
+    smartlist_sort_strings(all_files);
+    SMARTLIST_FOREACH_BEGIN(all_files, char *, f) {
+      if (f[0] == '.') {
+        tor_free(f);
+        continue;
+      }
+
+      size_t fullname_len = (size_t) (strlen(path) + strlen(f) + 2);
+      char *fullname = tor_malloc_zero(fullname_len);
+      strlcat(fullname, path, fullname_len);
+      strlcat(fullname, PATH_SEPARATOR, fullname_len);
+      strlcat(fullname, f, fullname_len);
+      tor_free(f);
+
+      if (file_status(fullname) != FN_FILE) {
+        tor_free(fullname);
+        continue;
+      }
+      smartlist_add(file_list, fullname);
+    } SMARTLIST_FOREACH_END(f);
+    smartlist_free(all_files);
+    return 0;
+  } else if (file_type == FN_EMPTY) {
+      return 0;
+  } else {
+    return -1;
+  }
 }
 
 /**

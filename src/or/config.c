@@ -5077,6 +5077,7 @@ options_init_from_string(const char *cf_defaults, const char *cf,
   config_line_t *cl;
   int retval;
   setopt_err_t err = SETOPT_ERR_MISC;
+  int cf_has_include;
   tor_assert(msg);
 
   oldoptions = global_options; /* get_options unfortunately asserts if
@@ -5093,7 +5094,7 @@ options_init_from_string(const char *cf_defaults, const char *cf,
     if (!body)
       continue;
     /* get config lines, assign them */
-    retval = config_get_lines(body, &cl, 1);
+    retval = config_get_lines(body, &cl, 1, body==cf ? &cf_has_include : NULL);
     if (retval < 0) {
       err = SETOPT_ERR_PARSE;
       goto err;
@@ -5120,6 +5121,8 @@ options_init_from_string(const char *cf_defaults, const char *cf,
     err = SETOPT_ERR_PARSE;
     goto err;
   }
+
+  newoptions->IncludeUsed = cf_has_include;
 
   /* If this is a testing network configuration, change defaults
    * for a list of dependent config options, re-initialize newoptions
@@ -5164,7 +5167,8 @@ options_init_from_string(const char *cf_defaults, const char *cf,
       if (!body)
         continue;
       /* get config lines, assign them */
-      retval = config_get_lines(body, &cl, 1);
+      retval = config_get_lines(body, &cl, 1,
+                                body == cf ? &cf_has_include : NULL);
       if (retval < 0) {
         err = SETOPT_ERR_PARSE;
         goto err;
@@ -5186,6 +5190,8 @@ options_init_from_string(const char *cf_defaults, const char *cf,
       goto err;
     }
   }
+
+  newoptions->IncludeUsed = cf_has_include;
 
   /* Validate newoptions */
   if (options_validate(oldoptions, newoptions, newdefaultoptions,
