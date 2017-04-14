@@ -119,7 +119,7 @@ test_options_validate_impl(const char *configuration,
 
   setup_options(opt, dflt);
 
-  r = config_get_lines(configuration, &cl, 1);
+  r = config_get_lines(configuration, &cl, 1, NULL);
   tt_int_op(r, OP_EQ, 0);
 
   r = config_assign(&options_format, opt, cl, 0, &msg);
@@ -221,7 +221,7 @@ test_have_enough_mem_for_dircache(void *arg)
   setup_log_callback();
   (void)dflt;
 
-  r = config_get_lines(configuration, &cl, 1);
+  r = config_get_lines(configuration, &cl, 1, NULL);
   tt_int_op(r, OP_EQ, 0);
 
   r = config_assign(&options_format, opt, cl, 0, &msg);
@@ -244,7 +244,7 @@ test_have_enough_mem_for_dircache(void *arg)
 
   config_free_lines(cl); cl = NULL;
   configuration = "ORPort 8080\nDirCache 1\nBridgeRelay 1";
-  r = config_get_lines(configuration, &cl, 1);
+  r = config_get_lines(configuration, &cl, 1, NULL);
   tt_int_op(r, OP_EQ, 0);
 
   r = config_assign(&options_format, opt, cl, 0, &msg);
@@ -267,7 +267,7 @@ test_have_enough_mem_for_dircache(void *arg)
 
   config_free_lines(cl); cl = NULL;
   configuration = "ORPort 8080\nDirCache 0";
-  r = config_get_lines(configuration, &cl, 1);
+  r = config_get_lines(configuration, &cl, 1, NULL);
   tt_int_op(r, OP_EQ, 0);
 
   r = config_assign(&options_format, opt, cl, 0, &msg);
@@ -354,7 +354,7 @@ get_options_test_data(const char *conf)
   result->opt = options_new();
   result->old_opt = options_new();
   result->def_opt = options_new();
-  rv = config_get_lines(conf, &cl, 1);
+  rv = config_get_lines(conf, &cl, 1, NULL);
   tt_assert(rv == 0);
   rv = config_assign(&options_format, result->opt, cl, 0, &msg);
   if (msg) {
@@ -365,7 +365,7 @@ get_options_test_data(const char *conf)
   config_free_lines(cl);
   result->opt->LogTimeGranularity = 1;
   result->opt->TokenBucketRefillInterval = 1;
-  rv = config_get_lines(TEST_OPTIONS_OLD_VALUES, &cl, 1);
+  rv = config_get_lines(TEST_OPTIONS_OLD_VALUES, &cl, 1, NULL);
   tt_assert(rv == 0);
   rv = config_assign(&options_format, result->def_opt, cl, 0, &msg);
   if (msg) {
@@ -622,7 +622,7 @@ test_options_validate__logs(void *ignored)
   tdata = get_options_test_data("");
   tdata->opt->RunAsDaemon = 0;
   config_line_t *cl=NULL;
-  config_get_lines("Log foo", &cl, 1);
+  config_get_lines("Log foo", &cl, 1, NULL);
   tdata->opt->Logs = cl;
   ret = options_validate(tdata->old_opt, tdata->opt, tdata->def_opt, 0, &msg);
   tt_int_op((intptr_t)tdata->opt->Logs, OP_EQ, (intptr_t)cl);
