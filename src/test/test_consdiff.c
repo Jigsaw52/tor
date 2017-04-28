@@ -622,6 +622,19 @@ test_consdiff_gen_ed_diff(void *arg)
   tt_str_eq_line(".", smartlist_get(diff, 5));
   tt_str_eq_line("2d", smartlist_get(diff, 6));
 
+  smartlist_free(diff);
+
+  smartlist_clear(cons1);
+  smartlist_clear(cons2);
+  consensus_split_lines(cons1, "B\n", area);
+  consensus_split_lines(cons2, "A\nB\n", area);
+  diff = gen_ed_diff(cons1, cons2, area);
+  tt_ptr_op(NULL, OP_NE, diff);
+  tt_int_op(3, OP_EQ, smartlist_len(diff));
+  tt_str_eq_line("0a", smartlist_get(diff, 0));
+  tt_str_eq_line("A", smartlist_get(diff, 1));
+  tt_str_eq_line(".", smartlist_get(diff, 2));
+
   /* TODO: small real use-cases, i.e. consensuses. */
 
  done:
@@ -687,6 +700,15 @@ test_consdiff_apply_ed_diff(void *arg)
 
   smartlist_clear(diff);
 
+  /* Unexpected range for add command. */
+  smartlist_add_linecpy(diff, area, "1,2a");
+  mock_clean_saved_logs();
+  cons2 = apply_ed_diff(cons1, diff, 0);
+  tt_ptr_op(NULL, OP_EQ, cons2);
+  expect_single_log_msg_containing("add lines after a range");
+
+  smartlist_clear(diff);
+
   /* Script is not in reverse order. */
   smartlist_add_linecpy(diff, area, "1d");
   smartlist_add_linecpy(diff, area, "3d");
@@ -746,6 +768,55 @@ test_consdiff_apply_ed_diff(void *arg)
 
   smartlist_clear(diff);
 
+  /* Ranges must be numeric only and cannot contain spaces. */
+  smartlist_add_linecpy(diff, area, "0, 4d");
+  mock_clean_saved_logs();
+  cons2 = apply_ed_diff(cons1, diff, 0);
+  tt_ptr_op(NULL, OP_EQ, cons2);
+  expect_single_log_msg_containing("an ed command was missing a range "
+                                   "end line number.");
+
+  smartlist_clear(diff);
+
+  /* '+' is not a number. */
+  smartlist_add_linecpy(diff, area, "+0,4d");
+  mock_clean_saved_logs();
+  cons2 = apply_ed_diff(cons1, diff, 0);
+  tt_ptr_op(NULL, OP_EQ, cons2);
+  expect_single_log_msg_containing("an ed command was missing a line number");
+
+  smartlist_clear(diff);
+
+  /* range duplication */
+  smartlist_add_linecpy(diff, area, "0,4d,5d");
+  mock_clean_saved_logs();
+  cons2 = apply_ed_diff(cons1, diff, 0);
+  tt_ptr_op(NULL, OP_EQ, cons2);
+  expect_single_log_msg_containing("an ed command longer than one char was "
+                                   "found");
+
+  smartlist_clear(diff);
+
+  /* space before command */
+  smartlist_add_linecpy(diff, area, "0,4 d");
+  mock_clean_saved_logs();
+  cons2 = apply_ed_diff(cons1, diff, 0);
+  tt_ptr_op(NULL, OP_EQ, cons2);
+  expect_single_log_msg_containing("an ed command longer than one char was "
+                                   "found");
+
+  smartlist_clear(diff);
+
+  /* space inside number */
+  smartlist_add_linecpy(diff, area, "0,4 5d");
+  mock_clean_saved_logs();
+  cons2 = apply_ed_diff(cons1, diff, 0);
+  tt_ptr_op(NULL, OP_EQ, cons2);
+  expect_single_log_msg_containing("an ed command longer than one char was "
+                                   "found");
+
+  smartlist_clear(diff);
+
   /* Test appending text, 'a'. */
   consensus_split_lines(diff, "3a\nU\nO\n.\n0a\nV\n.\n", area);
   cons2 = apply_ed_diff(cons1, diff, 0);
@@ -775,7 +846,7 @@ test_consdiff_apply_ed_diff(void *arg)
   smartlist_free(cons2);
 
   /* Test changing text, 'c'. */
-  consensus_split_lines(diff, "4c\nT\nX\n.\n1, 2c\nM\n.\n", area);
+  consensus_split_lines(diff, "4c\nT\nX\n.\n1,2c\nM\n.\n", area);
   cons2 = apply_ed_diff(cons1, diff, 0);
   tt_ptr_op(NULL, OP_NE, cons2);
   tt_int_op(5, OP_EQ, smartlist_len(cons2));

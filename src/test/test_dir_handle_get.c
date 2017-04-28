@@ -14,6 +14,7 @@
 #include "connection.h"
 #include "directory.h"
 #include "test.h"
+#include "compress.h"
 #include "connection.h"
 #include "rendcommon.h"
 #include "rendcache.h"
@@ -28,7 +29,6 @@
 #include "networkstatus.h"
 #include "geoip.h"
 #include "dirserv.h"
-#include "torgzip.h"
 #include "dirvote.h"
 #include "log_test_helpers.h"
 
@@ -1832,8 +1832,8 @@ test_dir_handle_get_status_vote_current_consensus_ns(void* data)
                                                             comp_body_used);
   tt_int_op(ZLIB_METHOD, OP_EQ, compression);
 
-  tor_gzip_uncompress(&body, &body_used, comp_body, comp_body_used,
-                      compression, 0, LOG_PROTOCOL_WARN);
+  tor_uncompress(&body, &body_used, comp_body, comp_body_used,
+                 compression, 0, LOG_PROTOCOL_WARN);
 
   tt_str_op(NETWORK_STATUS, OP_EQ, body);
   tt_int_op(strlen(NETWORK_STATUS), OP_EQ, body_used);
@@ -2497,6 +2497,52 @@ test_dir_handle_get_status_vote_current_authority(void* data)
     dirvote_free_all();
 }
 
+static void
+test_dir_handle_get_parse_accept_encoding(void *arg)
+{
+  (void)arg;
+  const unsigned B_NONE = 1u << NO_METHOD;
+  const unsigned B_ZLIB = 1u << ZLIB_METHOD;
+  const unsigned B_GZIP = 1u << GZIP_METHOD;
+  const unsigned B_LZMA = 1u << LZMA_METHOD;
+  const unsigned B_ZSTD = 1u << ZSTD_METHOD;
+
+  unsigned encodings;
+
+  encodings = parse_accept_encoding_header("");
+  tt_uint_op(B_NONE, OP_EQ, encodings);
+
+  encodings = parse_accept_encoding_header("  ");
+  tt_uint_op(B_NONE, OP_EQ, encodings);
+
+  encodings = parse_accept_encoding_header("dewey, cheatham, and howe ");
+  tt_uint_op(B_NONE, OP_EQ, encodings);
+
+  encodings = parse_accept_encoding_header("dewey, cheatham, and gzip");
+  tt_uint_op(B_NONE, OP_EQ, encodings);
+
+  encodings = parse_accept_encoding_header("dewey, cheatham, and, gzip");
+  tt_uint_op(B_NONE|B_GZIP, OP_EQ, encodings);
+
+  encodings = parse_accept_encoding_header(" gzip");
+  tt_uint_op(B_NONE|B_GZIP, OP_EQ, encodings);
+
+  encodings = parse_accept_encoding_header("gzip");
+  tt_uint_op(B_NONE|B_GZIP, OP_EQ, encodings);
+
+  encodings = parse_accept_encoding_header("x-zstd, deflate, x-lzma");
+  tt_uint_op(B_NONE|B_ZLIB|B_ZSTD|B_LZMA, OP_EQ, encodings);
+
+  encodings = parse_accept_encoding_header("x-zstd, deflate, x-lzma, gzip");
+  tt_uint_op(B_NONE|B_ZLIB|B_ZSTD|B_LZMA|B_GZIP, OP_EQ, encodings);
+
+  encodings = parse_accept_encoding_header("x-zstd,deflate,x-lzma,gzip");
+  tt_uint_op(B_NONE|B_ZLIB|B_ZSTD|B_LZMA|B_GZIP, OP_EQ, encodings);
+
+ done:
+  ;
+}
+
 #define DIR_HANDLE_CMD(name,flags) \
   { #name, test_dir_handle_get_##name, (flags), NULL, NULL }
 
@@ -2555,6 +2601,7 @@ struct testcase_t dir_handle_get_tests[] = {
   DIR_HANDLE_CMD(status_vote_next_consensus_signatures_not_found, 0),
   DIR_HANDLE_CMD(status_vote_next_consensus_signatures_busy, 0),
   DIR_HANDLE_CMD(status_vote_next_consensus_signatures, 0),
+  DIR_HANDLE_CMD(parse_accept_encoding, 0),
   END_OF_TESTCASES
 };
 

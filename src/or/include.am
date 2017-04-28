@@ -38,6 +38,7 @@ LIBTOR_A_SOURCES = \
 	src/or/connection_or.c				\
 	src/or/conscache.c				\
 	src/or/consdiff.c				\
+	src/or/consdiffmgr.c				\
 	src/or/control.c				\
 	src/or/cpuworker.c				\
 	src/or/dircollate.c				\
@@ -119,8 +120,10 @@ src_or_tor_LDFLAGS = @TOR_LDFLAGS_zlib@ @TOR_LDFLAGS_openssl@ @TOR_LDFLAGS_libev
 src_or_tor_LDADD = src/or/libtor.a src/common/libor.a src/common/libor-ctime.a \
 	src/common/libor-crypto.a $(LIBKECCAK_TINY) $(LIBDONNA) \
 	src/common/libor-event.a src/trunnel/libor-trunnel.a \
+	src/trace/libor-trace.a \
 	@TOR_ZLIB_LIBS@ @TOR_LIB_MATH@ @TOR_LIBEVENT_LIBS@ @TOR_OPENSSL_LIBS@ \
-	@TOR_LIB_WS32@ @TOR_LIB_GDI@ @CURVE25519_LIBS@ @TOR_SYSTEMD_LIBS@
+	@TOR_LIB_WS32@ @TOR_LIB_GDI@ @CURVE25519_LIBS@ @TOR_SYSTEMD_LIBS@ \
+	@TOR_LZMA_LIBS@ @TOR_ZSTD_LIBS@
 
 if COVERAGE_ENABLED
 src_or_tor_cov_SOURCES = src/or/tor_main.c
@@ -132,7 +135,8 @@ src_or_tor_cov_LDADD = src/or/libtor-testing.a src/common/libor-testing.a \
 	src/common/libor-crypto-testing.a $(LIBKECCAK_TINY) $(LIBDONNA) \
 	src/common/libor-event-testing.a src/trunnel/libor-trunnel-testing.a \
 	@TOR_ZLIB_LIBS@ @TOR_LIB_MATH@ @TOR_LIBEVENT_LIBS@ @TOR_OPENSSL_LIBS@ \
-	@TOR_LIB_WS32@ @TOR_LIB_GDI@ @CURVE25519_LIBS@ @TOR_SYSTEMD_LIBS@
+	@TOR_LIB_WS32@ @TOR_LIB_GDI@ @CURVE25519_LIBS@ @TOR_SYSTEMD_LIBS@ \
+	@TOR_LZMA_LIBS@ @TOR_ZSTD_LIBS@
 endif
 
 ORHEADERS = \
@@ -156,6 +160,7 @@ ORHEADERS = \
 	src/or/connection_or.h				\
 	src/or/conscache.h				\
 	src/or/consdiff.h				\
+	src/or/consdiffmgr.h				\
 	src/or/control.h				\
 	src/or/cpuworker.h				\
 	src/or/dircollate.h				\

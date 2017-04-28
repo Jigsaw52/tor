@@ -16,6 +16,7 @@
  */
 struct consensus_cache_entry_t {
   uint32_t magic; /**< Must be set to CCE_MAGIC */
+  HANDLE_ENTRY(consensus_cache_entry, consensus_cache_entry_t);
   int32_t refcnt; /**< Reference count. */
   unsigned can_remove : 1; /**< If true, we want to delete this file. */
   /** If true, we intend to unmap this file as soon as we're done with it. */
@@ -77,13 +78,24 @@ consensus_cache_open(const char *subdir, int max_entries)
 }
 
 /**
+ * Tell the sandbox (if any) configured by <b>cfg</b> to allow the
+ * operations that <b>cache</b> will need.
+ */
+int
+consensus_cache_register_with_sandbox(consensus_cache_t *cache,
+                                      struct sandbox_cfg_elem **cfg)
+{
+  return storage_dir_register_with_sandbox(cache->dir, cfg);
+}
+
+/**
  * Helper: clear all entries from <b>cache</b> (but do not delete
  * any that aren't marked for removal
  */
 static void
 consensus_cache_clear(consensus_cache_t *cache)
 {
-  consensus_cache_delete_pending(cache);
+  consensus_cache_delete_pending(cache, 0);
 
   SMARTLIST_FOREACH_BEGIN(cache->entries, consensus_cache_entry_t *, ent) {
     ent->in_cache = NULL;
@@ -174,6 +186,8 @@ consensus_cache_find_first(consensus_cache_t *cache,
  * Given a <b>cache</b>, add every entry to <b>out<b> for which
  * <b>key</b>=<b>value</b>.  If <b>key</b> is NULL, add every entry.
  *
+ * Do not add any entry that has been marked for removal.
+ *
  * Does not adjust reference counts.
  */
 void
@@ -182,12 +196,15 @@ consensus_cache_find_all(smartlist_t *out,
                          const char *key,
                          const char *value)
 {
-  if (! key) {
-    smartlist_add_all(out, cache->entries);
-    return;
-  }
-
   SMARTLIST_FOREACH_BEGIN(cache->entries, consensus_cache_entry_t *, ent) {
+    if (ent->can_remove == 1) {
+      /* We want to delete this; pretend it isn't there. */
+      continue;
+    }
+    if (! key) {
+      smartlist_add(out, ent);
+      continue;
+    }
     const char *found_val = consensus_cache_entry_get_value(ent, key);
     if (found_val && !strcmp(value, found_val)) {
       smartlist_add(out, ent);
@@ -300,6 +317,7 @@ consensus_cache_entry_decref(consensus_cache_entry_t *ent)
   }
   tor_free(ent->fname);
   config_free_lines(ent->labels);
+  consensus_cache_entry_handles_clear(ent);
   memwipe(ent, 0, sizeof(consensus_cache_entry_t));
   tor_free(ent);
 }
@@ -382,18 +400,33 @@ consensus_cache_unmap_lazy(consensus_cache_t *cache, time_t cutoff)
 }
 
 /**
+ * Return the number of currently unused filenames available in this cache.
+ */
+int
+consensus_cache_get_n_filenames_available(consensus_cache_t *cache)
+{
+  tor_assert(cache);
+  int max = storage_dir_get_max_files(cache->dir);
+  int used = smartlist_len(storage_dir_list(cache->dir));
+  tor_assert_nonfatal(max >= used);
+  return max - used;
+}
+
+/**
  * Delete every element of <b>cache</b> has been marked with
- * consensus_cache_entry_mark_for_removal, and which is not in use except by
- * the cache.
+ * consensus_cache_entry_mark_for_removal.  If <b>force</b> is false,
+ * retain those entries which are not in use except by the cache.
  */
 void
-consensus_cache_delete_pending(consensus_cache_t *cache)
+consensus_cache_delete_pending(consensus_cache_t *cache, int force)
 {
   SMARTLIST_FOREACH_BEGIN(cache->entries, consensus_cache_entry_t *, ent) {
     tor_assert_nonfatal(ent->in_cache == cache);
-    if (ent->refcnt > 1 || BUG(ent->in_cache == NULL)) {
-      /* Somebody is using this entry right now */
-      continue;
+    if (! force) {
+      if (ent->refcnt > 1 || BUG(ent->in_cache == NULL)) {
+        /* Somebody is using this entry right now */
+        continue;
+      }
     }
     if (ent->can_remove == 0) {
       /* Don't want to delete this. */
@@ -484,6 +517,8 @@ consensus_cache_entry_unmap(consensus_cache_entry_t *ent)
   ent->bodylen = 0;
   ent->unused_since = TIME_MAX;
 }
+
+HANDLE_IMPL(consensus_cache_entry, consensus_cache_entry_t, )
 
 #ifdef TOR_UNIT_TESTS
 /**

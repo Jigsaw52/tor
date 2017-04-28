@@ -69,10 +69,12 @@
 #include "circuitmux.h"
 #include "circuitmux_ewma.h"
 #include "circuitstats.h"
+#include "compress.h"
 #include "config.h"
 #include "connection.h"
 #include "connection_edge.h"
 #include "connection_or.h"
+#include "consdiffmgr.h"
 #include "control.h"
 #include "confparse.h"
 #include "cpuworker.h"
@@ -99,7 +101,6 @@
 #include "statefile.h"
 #include "transports.h"
 #include "ext_orport.h"
-#include "torgzip.h"
 #ifdef _WIN32
 #include <shlobj.h>
 #endif
@@ -1813,6 +1814,15 @@ options_act(const or_options_t *old_options)
     /* This should be impossible, but let's be sure. */
     log_warn(LD_BUG,"Error parsing already-validated policy options.");
     return -1;
+  }
+
+  if (server_mode(options)) {
+    static int cdm_initialized = 0;
+    if (cdm_initialized == 0) {
+      cdm_initialized = 1;
+      consdiffmgr_configure(NULL);
+      consdiffmgr_validate();
+    }
   }
 
   if (init_control_cookie_authentication(options->CookieAuthentication) < 0) {
@@ -4949,9 +4959,21 @@ options_init_from_torrc(int argc, char **argv)
     printf("OpenSSL \t\t%-15s\t\t%s\n",
                       crypto_openssl_get_header_version_str(),
                       crypto_openssl_get_version_str());
-    printf("Zlib    \t\t%-15s\t\t%s\n",
-                      tor_zlib_get_header_version_str(),
-                      tor_zlib_get_version_str());
+    if (tor_compress_supports_method(ZLIB_METHOD)) {
+      printf("Zlib    \t\t%-15s\t\t%s\n",
+                        tor_compress_version_str(ZLIB_METHOD),
+                        tor_compress_header_version_str(ZLIB_METHOD));
+    }
+    if (tor_compress_supports_method(LZMA_METHOD)) {
+      printf("Liblzma \t\t%-15s\t\t%s\n",
+                        tor_compress_version_str(LZMA_METHOD),
+                        tor_compress_header_version_str(LZMA_METHOD));
+    }
+    if (tor_compress_supports_method(ZSTD_METHOD)) {
+      printf("Libzstd \t\t%-15s\t\t%s\n",
+                        tor_compress_version_str(ZSTD_METHOD),
+                        tor_compress_header_version_str(ZSTD_METHOD));
+    }
     //TODO: Hex versions?
     exit(0);
   }

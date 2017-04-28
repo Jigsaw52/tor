@@ -1054,20 +1054,13 @@ rend_log_intro_limit(const rend_service_t *service, int min_severity)
   }
   time_t intro_period_elapsed = time(NULL) - service->intro_period_started;
   tor_assert_nonfatal(intro_period_elapsed >= 0);
-  /* We delayed resuming circuits longer than expected */
-  int exceeded_elapsed = (intro_period_elapsed > INTRO_CIRC_RETRY_PERIOD +
-                          INTRO_CIRC_RETRY_PERIOD_SLOP);
-  if (exceeded_elapsed) {
-    severity = LOG_WARN;
-  }
   log_fn(severity, LD_REND, "Hidden service %s %s %d intro points in the last "
-         "%d seconds%s. Intro circuit launches are limited to %d per %d "
+         "%d seconds. Intro circuit launches are limited to %d per %d "
          "seconds.",
          service->service_id,
          exceeded_limit ? "exceeded launch limit with" : "launched",
          service->n_intro_circuits_launched,
          (int)intro_period_elapsed,
-         exceeded_elapsed ? " (delayed)" : "",
          rend_max_intro_circs_per_period(service->n_intro_points_wanted),
          INTRO_CIRC_RETRY_PERIOD);
   rend_service_dump_stats(severity);
@@ -3712,13 +3705,16 @@ directory_post_to_hs_dir(rend_service_descriptor_t *renddesc,
        * request. Lookup is made in rend_service_desc_has_uploaded(). */
       rend_data = rend_data_client_create(service_id, desc->desc_id, NULL,
                                           REND_NO_AUTH);
-      directory_initiate_command_routerstatus_rend(hs_dir,
-                                              DIR_PURPOSE_UPLOAD_RENDDESC_V2,
-                                                   ROUTER_PURPOSE_GENERAL,
-                                                   DIRIND_ANONYMOUS, NULL,
-                                                   desc->desc_str,
-                                                   strlen(desc->desc_str),
-                                                   0, rend_data, NULL);
+      directory_request_t *req =
+        directory_request_new(DIR_PURPOSE_UPLOAD_RENDDESC_V2);
+      directory_request_set_routerstatus(req, hs_dir);
+      directory_request_set_indirection(req, DIRIND_ANONYMOUS);
+      directory_request_set_payload(req,
+                                    desc->desc_str, strlen(desc->desc_str));
+      directory_request_set_rend_query(req, rend_data);
+      directory_initiate_request(req);
+      directory_request_free(req);
+
       rend_data_free(rend_data);
       base32_encode(desc_id_base32, sizeof(desc_id_base32),
                     desc->desc_id, DIGEST_LEN);

@@ -71,7 +71,7 @@
 #include "tortls.h"
 #include "torlog.h"
 #include "container.h"
-#include "torgzip.h"
+#include "compress.h"
 #include "address.h"
 #include "compat_libevent.h"
 #include "ht.h"
@@ -423,12 +423,13 @@ typedef enum {
 #define DIR_PURPOSE_FETCH_MICRODESC 19
 #define DIR_PURPOSE_MAX_ 19
 
-/** True iff <b>p</b> is a purpose corresponding to uploading data to a
- * directory server. */
+/** True iff <b>p</b> is a purpose corresponding to uploading
+ * data to a directory server. */
 #define DIR_PURPOSE_IS_UPLOAD(p)                \
   ((p)==DIR_PURPOSE_UPLOAD_DIR ||               \
    (p)==DIR_PURPOSE_UPLOAD_VOTE ||              \
-   (p)==DIR_PURPOSE_UPLOAD_SIGNATURES)
+   (p)==DIR_PURPOSE_UPLOAD_SIGNATURES || \
+   (p)==DIR_PURPOSE_UPLOAD_RENDDESC_V2)
 
 #define EXIT_PURPOSE_MIN_ 1
 /** This exit stream wants to do an ordinary connect. */
@@ -1773,8 +1774,8 @@ typedef struct dir_connection_t {
   /** List of spooled_resource_t for objects that we're spooling. We use
    * it from back to front. */
   smartlist_t *spool;
-  /** The zlib object doing on-the-fly compression for spooled data. */
-  tor_zlib_state_t *zlib_state;
+  /** The compression object doing on-the-fly compression for spooled data. */
+  tor_compress_state_t *compress_state;
 
   /** What rendezvous service are we querying for? */
   rend_data_t *rend_data;
@@ -5306,7 +5307,8 @@ typedef struct dir_server_t {
                            * address information from published? */
 
   routerstatus_t fake_status; /**< Used when we need to pass this trusted
-                               * dir_server_t to directory_initiate_command_*
+                               * dir_server_t to
+                               * directory_request_set_routerstatus.
                                * as a routerstatus_t.  Not updated by the
                                * router-status management code!
                                **/

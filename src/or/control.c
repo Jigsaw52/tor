@@ -1877,7 +1877,7 @@ getinfo_helper_listeners(control_connection_t *control_conn,
 
 /** Implementation helper for GETINFO: knows the answers for questions about
  * directory information. */
-static int
+STATIC int
 getinfo_helper_dir(control_connection_t *control_conn,
                    const char *question, char **answer,
                    const char **errmsg)
@@ -2068,7 +2068,7 @@ getinfo_helper_dir(control_connection_t *control_conn,
       char d[DIGEST_LEN];
       signed_descriptor_t *sd = NULL;
       if (base16_decode(d, sizeof(d), question, strlen(question))
-                        != sizeof(d)) {
+                        == sizeof(d)) {
         /* XXXX this test should move into extrainfo_get_by_descriptor_digest,
          * but I don't want to risk affecting other parts of the code,
          * especially since the rules for using our own extrainfo (including

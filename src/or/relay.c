@@ -54,6 +54,7 @@
 #include "circuitbuild.h"
 #include "circuitlist.h"
 #include "circuituse.h"
+#include "compress.h"
 #include "config.h"
 #include "connection.h"
 #include "connection_edge.h"
@@ -225,7 +226,8 @@ circuit_receive_relay_cell(cell_t *cell, circuit_t *circ,
     return 0;
 
   if (relay_crypt(circ, cell, cell_direction, &layer_hint, &recognized) < 0) {
-    log_warn(LD_BUG,"relay crypt failed. Dropping connection.");
+    log_fn(LOG_PROTOCOL_WARN, LD_PROTOCOL,
+           "relay crypt failed. Dropping connection.");
     return -END_CIRC_REASON_INTERNAL;
   }
 
@@ -2453,7 +2455,7 @@ cell_queues_check_size(void)
 {
   size_t alloc = cell_queues_get_total_allocation();
   alloc += buf_get_total_allocation();
-  alloc += tor_zlib_get_total_allocation();
+  alloc += tor_compress_get_total_allocation();
   const size_t rend_cache_total = rend_cache_get_total_allocation();
   alloc += rend_cache_total;
   if (alloc >= get_options()->MaxMemInQueues_low_threshold) {
