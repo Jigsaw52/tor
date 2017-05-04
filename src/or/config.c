@@ -860,6 +860,25 @@ set_options(or_options_t *new_val, char **msg)
   return 0;
 }
 
+/** Stores the current directory at the time tor was started */
+static char *initial_directory = NULL;
+
+void
+config_initial_directory_init(void)
+{
+  char current_dir[] = ".";
+  initial_directory = make_path_absolute(current_dir);
+  initial_directory[strlen(initial_directory)-1] = '\0';
+}
+
+static const char *
+get_initial_directory(void)
+{
+  if (initial_directory == NULL)
+    config_initial_directory_init();
+  return initial_directory;
+}
+
 extern const char tor_git_revision[]; /* from tor_main.c */
 
 /** The version of this Tor process, as parsed. */
@@ -944,6 +963,8 @@ config_free_all(void)
   tor_free(torrc_fname);
   tor_free(torrc_defaults_fname);
   tor_free(global_dirfrontpagecontents);
+
+  tor_free(initial_directory);
 
   tor_free(the_short_tor_version);
   tor_free(the_tor_version);
@@ -7673,12 +7694,18 @@ options_get_datadir_fname2_suffix,(const or_options_t *options,
                                    const char *sub1, const char *sub2,
                                    const char *suffix))
 {
+  const char *root = "\0";
   char *fname = NULL;
   size_t len;
   tor_assert(options);
   tor_assert(options->DataDirectory);
   tor_assert(sub1 || !sub2); /* If sub2 is present, sub1 must be present. */
   len = strlen(options->DataDirectory);
+  if (path_is_relative(options->DataDirectory)) {
+    root = get_initial_directory();
+    len += strlen(root);
+  }
+
   if (sub1) {
     len += strlen(sub1)+1;
     if (sub2)
@@ -7690,11 +7717,11 @@ options_get_datadir_fname2_suffix,(const or_options_t *options,
   fname = tor_malloc(len);
   if (sub1) {
     if (sub2) {
-      tor_snprintf(fname, len, "%s"PATH_SEPARATOR"%s"PATH_SEPARATOR"%s",
-                   options->DataDirectory, sub1, sub2);
+      tor_snprintf(fname, len, "%s%s"PATH_SEPARATOR"%s"PATH_SEPARATOR"%s",
+                   root, options->DataDirectory, sub1, sub2);
     } else {
-      tor_snprintf(fname, len, "%s"PATH_SEPARATOR"%s",
-                   options->DataDirectory, sub1);
+      tor_snprintf(fname, len, "%s%s"PATH_SEPARATOR"%s",
+                   root, options->DataDirectory, sub1);
     }
   } else {
     strlcpy(fname, options->DataDirectory, len);

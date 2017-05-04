@@ -177,8 +177,11 @@ test_ext_or_init_auth(void *arg)
   tor_free(options->DataDirectory);
   options->DataDirectory = tor_strdup("foo");
   cp = get_ext_or_auth_cookie_file_name();
-  tt_str_op(cp, OP_EQ, "foo"PATH_SEPARATOR"extended_orport_auth_cookie");
+  char expected_path[] = {"foo"PATH_SEPARATOR"extended_orport_auth_cookie"};
+  char *expected_abs_path = make_path_absolute(expected_path);
+  tt_str_op(cp, OP_EQ, expected_abs_path);
   tor_free(cp);
+  tor_free(expected_abs_path);
 
   /* Shouldn't be initialized already, or our tests will be a bit
    * meaningless */
@@ -455,6 +458,7 @@ test_ext_or_handshake(void *arg)
   memcpy(ext_or_auth_cookie, "Gliding wrapt in a brown mantle," , 32);
   ext_or_auth_cookie_is_set = 1;
 
+  config_initial_directory_init();
   init_connection_lists();
 
   conn = or_connection_new(CONN_TYPE_EXT_OR, AF_INET);
