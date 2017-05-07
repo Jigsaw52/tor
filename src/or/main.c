@@ -2962,6 +2962,7 @@ tor_init(int argc, char *argv[])
   /* Have the log set up with our application name. */
   tor_snprintf(progname, sizeof(progname), "Tor %s", get_version());
   log_set_application_name(progname);
+  config_initial_directory_init();
 
   /* Set up the crypto nice and early */
   if (crypto_early_init() < 0) {
