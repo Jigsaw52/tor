@@ -861,60 +861,13 @@ set_options(or_options_t *new_val, char **msg)
   return 0;
 }
 
-/** Stores the current directory at the time tor was started */
-static char *initial_directory = NULL;
-
-void
-config_initial_directory_init(void)
-{
-  char current_dir[] = ".";
-  initial_directory = make_path_absolute(current_dir);
-  initial_directory[strlen(initial_directory)-1] = '\0';  /* Remove . */
-}
-
-static const char *
-get_initial_directory(void)
-{
-  if (initial_directory == NULL)
-    config_initial_directory_init();
-  return initial_directory;
-}
-
-/** Calls expand_filename() and makes the returned path absolute */
-static char *
-expand_filename_absolute(const char *filename)
-{
-  char *expanded = expand_filename(filename);
-  if (path_is_relative(expanded)) {
-    const char *root = get_initial_directory();
-    int abs_path_len = strlen(root) + strlen(expanded);
-    char *abs_path = tor_malloc(abs_path_len+1);
-    tor_snprintf(abs_path, abs_path_len+1, "%s%s",
-                 root, expanded);
-    tor_free(expanded);
-    return abs_path;
-  } else {
-    return expanded;
-  }
-
 /** Stores the absolute path of the data directory */
 static char *data_directory_absolute_path = NULL;
 
 char *
 get_data_directory_absolute_path(const or_options_t *options)
 {
-  char *datadir_absolute_path;
-  const char *options_datadir = options->DataDirectory;
-  if (path_is_relative(options_datadir)) {
-    const char *root = get_initial_directory();
-    int datadir_abs_len = strlen(root) + strlen(options_datadir);
-    datadir_absolute_path = tor_malloc(datadir_abs_len+1);
-    tor_snprintf(datadir_absolute_path, datadir_abs_len+1, "%s%s",
-                 root, options_datadir);
-  } else {
-    datadir_absolute_path = tor_strdup(options_datadir);
-  }
-  return datadir_absolute_path;
+  return expand_filename(options->DataDirectory);
 }
 
 const char *
@@ -1013,7 +966,6 @@ config_free_all(void)
   tor_free(global_dirfrontpagecontents);
 
   tor_free(data_directory_absolute_path);
-  tor_free(initial_directory);
 
   tor_free(the_short_tor_version);
   tor_free(the_tor_version);
@@ -4860,7 +4812,7 @@ find_torrc_filename(config_line_t *cmd_arg,
             fname_opt);
         tor_free(fname);
       }
-      fname = expand_filename_absolute(p_index->value);
+      fname = expand_filename(p_index->value);
       *using_default_fname = 0;
     } else if (ignore_opt && !strcmp(p_index->key,ignore_opt)) {
       *ignore_missing_torrc = 1;
@@ -5516,7 +5468,7 @@ options_init_logs(const or_options_t *old_options, or_options_t *options,
     if (smartlist_len(elts) == 2 &&
         !strcasecmp(smartlist_get(elts,0), "file")) {
       if (!validate_only) {
-        char *fname = expand_filename_absolute(smartlist_get(elts, 1));
+        char *fname = expand_filename(smartlist_get(elts, 1));
         /* Truncate if TruncateLogFile is set and we haven't seen this option
            line before. */
         int truncate_log = 0;

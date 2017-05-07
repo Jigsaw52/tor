@@ -3045,18 +3045,17 @@ unescape_string(const char *s, char **result, size_t *size_out)
   }
 }
 
-/** Expand any homedir prefix on <b>filename</b>; return a newly allocated
- * string. */
+/** Expand any homedir prefix on <b>filename</b>; Turns a realtive path into an
+ * absolute path. Return a newly allocated string. */
 char *
 expand_filename(const char *filename)
 {
   tor_assert(filename);
+  if (!*filename) {
+    return tor_strdup("");
+  }
 #ifdef _WIN32
-  /* Might consider using GetFullPathName() as described here:
-   * http://etutorials.org/Programming/secure+programming/
-   *     Chapter+3.+Input+Validation/3.7+Validating+Filenames+and+Paths/
-   */
-  return tor_strdup(filename);
+  return make_path_absolute(filename);
 #else
   if (*filename == '~') {
     char *home, *result=NULL;
@@ -3089,7 +3088,7 @@ expand_filename(const char *filename)
       rest = slash ? (slash+1) : "";
 #else
       log_warn(LD_CONFIG, "Couldn't expand homedir on system without pwd.h");
-      return tor_strdup(filename);
+      return make_path_absolute(filename);
 #endif
     }
     tor_assert(home);
@@ -3099,9 +3098,9 @@ expand_filename(const char *filename)
     }
     tor_asprintf(&result,"%s"PATH_SEPARATOR"%s",home,rest);
     tor_free(home);
-    return result;
+    return make_path_absolute(result);
   } else {
-    return tor_strdup(filename);
+    return make_path_absolute(filename);
   }
 #endif
 }
@@ -3519,6 +3518,10 @@ path_is_relative(const char *filename)
     return 0;
   else if (filename && strlen(filename)>3 && TOR_ISALPHA(filename[0]) &&
            filename[1] == ':' && filename[2] == '\\')
+    return 0;
+#else
+  // Assume paths started with variables are absolute
+  if (filename && filename[0] == '$')
     return 0;
 #endif
   else
@@ -5609,5 +5612,43 @@ uint64_t
 tor_ntohll(uint64_t a)
 {
   return tor_htonll(a);
+}
+
+/** Stores the current directory at the time tor was started */
+static char *initial_directory = NULL;
+
+void
+util_initial_directory_init(void)
+{
+  initial_directory = get_current_directory();
+}
+
+void
+util_initial_directory_free(void)
+{
+  tor_free(initial_directory);
+}
+
+static const char *
+get_initial_directory(void)
+{
+  if (initial_directory == NULL)
+    util_initial_directory_init();
+  return initial_directory;
+}
+
+/** Expand possibly relative path <b>fname</b> to an absolute path.
+ * Return a newly allocated string, possibly equal to <b>fname</b>. */
+char *
+make_path_absolute(const char *fname)
+{
+  if (path_is_relative(fname)) {
+    const char *initial_dir = get_initial_directory();
+    char *abs_path;
+    tor_asprintf(&abs_path, "%s"PATH_SEPARATOR"%s", initial_dir, fname);
+    return abs_path;
+  } else {
+    return tor_strdup(fname);
+  }
 }
 

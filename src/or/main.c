@@ -2962,7 +2962,7 @@ tor_init(int argc, char *argv[])
   /* Have the log set up with our application name. */
   tor_snprintf(progname, sizeof(progname), "Tor %s", get_version());
   log_set_application_name(progname);
-  config_initial_directory_init();
+  util_initial_directory_init();
 
   /* Set up the crypto nice and early */
   if (crypto_early_init() < 0) {
@@ -3186,6 +3186,7 @@ tor_free_all(int postfork)
   consdiffmgr_free_all();
   if (!postfork) {
     config_free_all();
+    util_initial_directory_free();
     or_state_free_all();
     router_free_all();
     routerkeys_free_all();

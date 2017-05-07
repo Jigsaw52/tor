@@ -458,7 +458,7 @@ test_ext_or_handshake(void *arg)
   memcpy(ext_or_auth_cookie, "Gliding wrapt in a brown mantle," , 32);
   ext_or_auth_cookie_is_set = 1;
 
-  config_initial_directory_init();
+  util_initial_directory_init();
   init_connection_lists();
 
   conn = or_connection_new(CONN_TYPE_EXT_OR, AF_INET);

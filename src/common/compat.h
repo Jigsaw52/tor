@@ -686,8 +686,9 @@ const struct passwd *tor_getpwnam(const char *username);
 const struct passwd *tor_getpwuid(uid_t uid);
 #endif
 
+char *get_current_directory(void);
+
 int get_parent_directory(char *fname);
-char *make_path_absolute(char *fname);
 
 char **get_environment(void);
 
