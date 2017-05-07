@@ -938,9 +938,9 @@ init_keys(void)
   cpd_check_t cpd_opts = CPD_CREATE;
   if (options->DataDirectoryGroupReadable)
     cpd_opts |= CPD_GROUP_READ;
-  if (check_private_dir(options->DataDirectory, cpd_opts, options->User)) {
+  if (check_private_dir(get_data_directory(), cpd_opts, options->User)) {
     log_err(LD_OR, "Can't create/check datadirectory %s",
-            options->DataDirectory);
+            get_data_directory());
     return -1;
   }
   /* Check the key directory. */
