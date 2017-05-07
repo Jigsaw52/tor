@@ -2336,14 +2336,19 @@ get_parent_directory(char *fname)
   return -1;
 }
 
-#ifndef _WIN32
 /** Return a newly allocated string containing the output of getcwd(). Return
- * NULL on failure. (We can't just use getcwd() into a PATH_MAX buffer, since
- * Hurd hasn't got a PATH_MAX.)
+ * NULL on failure.
  */
-static char *
-alloc_getcwd(void)
+char *
+get_current_directory(void)
 {
+#ifdef _WIN32
+  char *path = _fullpath(NULL, ".", 1);
+  path[strlen(path)-1] = '\0'; /* Remove . */
+  return path;
+#else
+/* We can't just use getcwd() into a PATH_MAX buffer, since Hurd hasn't got a
+ * PATH_MAX */
 #ifdef PATH_MAX
 #define MAX_CWD PATH_MAX
 #else
@@ -2353,46 +2358,6 @@ alloc_getcwd(void)
   char path_buf[MAX_CWD];
   char *path = getcwd(path_buf, sizeof(path_buf));
   return path ? tor_strdup(path) : NULL;
-}
-#endif
-
-/** Expand possibly relative path <b>fname</b> to an absolute path.
- * Return a newly allocated string, possibly equal to <b>fname</b>. */
-char *
-make_path_absolute(char *fname)
-{
-#ifdef _WIN32
-  char *absfname_malloced = _fullpath(NULL, fname, 1);
-
-  /* We don't want to assume that tor_free can free a string allocated
-   * with malloc.  On failure, return fname (it's better than nothing). */
-  char *absfname = tor_strdup(absfname_malloced ? absfname_malloced : fname);
-  if (absfname_malloced) raw_free(absfname_malloced);
-
-  return absfname;
-#else
-  char *absfname = NULL, *path = NULL;
-
-  tor_assert(fname);
-
-  if (fname[0] == '/') {
-    absfname = tor_strdup(fname);
-  } else {
-    path = alloc_getcwd();
-    if (path) {
-      tor_asprintf(&absfname, "%s/%s", path, fname);
-      tor_free(path);
-    } else {
-      /* LCOV_EXCL_START Can't make getcwd fail. */
-      /* If getcwd failed, the best we can do here is keep using the
-       * relative path.  (Perhaps / isn't readable by this UID/GID.) */
-      log_warn(LD_GENERAL, "Unable to find current working directory: %s",
-               strerror(errno));
-      absfname = tor_strdup(fname);
-      /* LCOV_EXCL_STOP */
-    }
-  }
-  return absfname;
 #endif
 }
 

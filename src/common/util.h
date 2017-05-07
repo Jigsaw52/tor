@@ -320,6 +320,13 @@ enum stream_status {
   IO_STREAM_CLOSED
 };
 
+/** Initializes the current directory as the initial tor directory */
+void util_initial_directory_init(void);
+
+void util_initial_directory_free(void);
+
+char *make_path_absolute(const char *fname);
+
 const char *stream_status_to_string(enum stream_status stream_status);
 
 enum stream_status get_string_from_pipe(int fd, char *buf, size_t count);

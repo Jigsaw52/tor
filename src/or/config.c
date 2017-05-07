@@ -861,6 +861,25 @@ set_options(or_options_t *new_val, char **msg)
   return 0;
 }
 
+/** Stores the absolute path of the data directory */
+static char *data_directory_absolute_path = NULL;
+
+char *
+get_data_directory_absolute_path(const or_options_t *options)
+{
+  return expand_filename(options->DataDirectory);
+}
+
+const char *
+get_data_directory(void)
+{
+  if (data_directory_absolute_path == NULL) {
+    const or_options_t *options = get_options();
+    data_directory_absolute_path = get_data_directory_absolute_path(options);
+  }
+  return data_directory_absolute_path;
+}
+
 extern const char tor_git_revision[]; /* from tor_main.c */
 
 /** The version of this Tor process, as parsed. */
@@ -945,6 +964,8 @@ config_free_all(void)
   tor_free(torrc_fname);
   tor_free(torrc_defaults_fname);
   tor_free(global_dirfrontpagecontents);
+
+  tor_free(data_directory_absolute_path);
 
   tor_free(the_short_tor_version);
   tor_free(the_tor_version);
@@ -1358,12 +1379,12 @@ options_act_reversible(const or_options_t *old_options, char **msg)
   cpd_check_t cpd_opts = running_tor ? CPD_CREATE : CPD_CHECK;
   if (options->DataDirectoryGroupReadable)
       cpd_opts |= CPD_GROUP_READ;
-  if (check_private_dir(options->DataDirectory,
+  if (check_private_dir(get_data_directory(),
                         cpd_opts,
                         options->User)<0) {
     tor_asprintf(msg,
               "Couldn't access/create private data directory \"%s\"",
-              options->DataDirectory);
+              get_data_directory());
 
     goto done;
     /* No need to roll back, since you can't change the value. */
@@ -1372,9 +1393,9 @@ options_act_reversible(const or_options_t *old_options, char **msg)
 #ifndef _WIN32
   if (options->DataDirectoryGroupReadable) {
     /* Only new dirs created get new opts, also enforce group read. */
-    if (chmod(options->DataDirectory, 0750)) {
+    if (chmod(get_data_directory(), 0750)) {
       log_warn(LD_FS,"Unable to make %s group-readable: %s",
-               options->DataDirectory, strerror(errno));
+               get_data_directory(), strerror(errno));
     }
   }
 #endif
@@ -1777,7 +1798,7 @@ options_act(const or_options_t *old_options)
   /* Finish backgrounding the process */
   if (options->RunAsDaemon) {
     /* We may be calling this for the n'th time (on SIGHUP), but it's safe. */
-    finish_daemon(options->DataDirectory);
+    finish_daemon(get_data_directory());
   }
 
   /* We want to reinit keys as needed before we do much of anything else:
@@ -4792,14 +4813,6 @@ find_torrc_filename(config_line_t *cmd_arg,
         tor_free(fname);
       }
       fname = expand_filename(p_index->value);
-
-      {
-        char *absfname;
-        absfname = make_path_absolute(fname);
-        tor_free(fname);
-        fname = absfname;
-      }
-
       *using_default_fname = 0;
     } else if (ignore_opt && !strcmp(p_index->key,ignore_opt)) {
       *ignore_missing_torrc = 1;
@@ -7714,7 +7727,8 @@ options_get_datadir_fname2_suffix,(const or_options_t *options,
   tor_assert(options);
   tor_assert(options->DataDirectory);
   tor_assert(sub1 || !sub2); /* If sub2 is present, sub1 must be present. */
-  len = strlen(options->DataDirectory);
+  char *datadir = get_data_directory_absolute_path(options);
+  len = strlen(datadir);
   if (sub1) {
     len += strlen(sub1)+1;
     if (sub2)
@@ -7727,16 +7741,17 @@ options_get_datadir_fname2_suffix,(const or_options_t *options,
   if (sub1) {
     if (sub2) {
       tor_snprintf(fname, len, "%s"PATH_SEPARATOR"%s"PATH_SEPARATOR"%s",
-                   options->DataDirectory, sub1, sub2);
+                   datadir, sub1, sub2);
     } else {
       tor_snprintf(fname, len, "%s"PATH_SEPARATOR"%s",
-                   options->DataDirectory, sub1);
+                   datadir, sub1);
     }
   } else {
-    strlcpy(fname, options->DataDirectory, len);
+    strlcpy(fname, datadir, len);
   }
   if (suffix)
     strlcat(fname, suffix, len);
+  tor_free(datadir);
   return fname;
 }
 

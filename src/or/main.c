@@ -2962,6 +2962,7 @@ tor_init(int argc, char *argv[])
   /* Have the log set up with our application name. */
   tor_snprintf(progname, sizeof(progname), "Tor %s", get_version());
   log_set_application_name(progname);
+  util_initial_directory_init();
 
   /* Set up the crypto nice and early */
   if (crypto_early_init() < 0) {
@@ -3185,6 +3186,7 @@ tor_free_all(int postfork)
   consdiffmgr_free_all();
   if (!postfork) {
     config_free_all();
+    util_initial_directory_free();
     or_state_free_all();
     router_free_all();
     routerkeys_free_all();
@@ -3388,7 +3390,7 @@ sandbox_init_filter(void)
     OPEN_DATADIR2(name, name2 suffix);                  \
   } while (0)
 
-  OPEN(options->DataDirectory);
+  OPEN(get_data_directory());
   OPEN_DATADIR("keys");
   OPEN_DATADIR_SUFFIX("cached-certs", ".tmp");
   OPEN_DATADIR_SUFFIX("cached-consensus", ".tmp");
