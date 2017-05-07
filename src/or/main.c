@@ -3389,7 +3389,7 @@ sandbox_init_filter(void)
     OPEN_DATADIR2(name, name2 suffix);                  \
   } while (0)
 
-  OPEN(options->DataDirectory);
+  OPEN(get_data_directory());
   OPEN_DATADIR("keys");
   OPEN_DATADIR_SUFFIX("cached-certs", ".tmp");
   OPEN_DATADIR_SUFFIX("cached-consensus", ".tmp");

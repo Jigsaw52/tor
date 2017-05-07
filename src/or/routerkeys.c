@@ -789,11 +789,14 @@ load_ed_keys(const or_options_t *options, time_t now)
     cpd_check_t cpd_opts = CPD_CREATE;
     if (options->DataDirectoryGroupReadable)
       cpd_opts |= CPD_GROUP_READ;
-    if (check_private_dir(options->DataDirectory, cpd_opts, options->User)) {
+    char *datadir = get_data_directory_absolute_path(options);
+    if (check_private_dir(datadir, cpd_opts, options->User)) {
       log_err(LD_OR, "Can't create/check datadirectory %s",
-              options->DataDirectory);
+              datadir);
+      tor_free(datadir);
       goto err;
     }
+    tor_free(datadir);
     char *fname = get_datadir_fname("keys");
     if (check_private_dir(fname, CPD_CREATE, options->User) < 0) {
       log_err(LD_OR, "Problem creating/checking key directory %s", fname);
