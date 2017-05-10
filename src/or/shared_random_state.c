@@ -695,7 +695,7 @@ disk_state_load_from_disk_impl(const char *fname)
 
     /* Every error in this code path will return EINVAL. */
     ret = -EINVAL;
-    if (config_get_lines(content, &lines, 0, NULL) < 0) {
+    if (config_get_lines(content, &lines, 0) < 0) {
       config_free_lines(lines);
       goto error;
     }

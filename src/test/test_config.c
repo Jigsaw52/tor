@@ -76,7 +76,7 @@ test_config_addressmap(void *arg)
           "MapAddress 6.6.6.6 www.infiniteloop.org\n"
           , sizeof(buf));
 
-  config_get_lines(buf, &(get_options_mutable()->AddressMap), 0, NULL);
+  config_get_lines(buf, &(get_options_mutable()->AddressMap), 0);
   config_register_addressmaps(get_options());
 
 /* Use old interface for now, so we don't need to rewrite the unit tests */
@@ -162,7 +162,7 @@ test_config_addressmap(void *arg)
           "MapAddress *.torproject.org 1.1.1.1\n"
           "MapAddress *.net 2.2.2.2\n"
           , sizeof(buf));
-  config_get_lines(buf, &(get_options_mutable()->AddressMap), 0, NULL);
+  config_get_lines(buf, &(get_options_mutable()->AddressMap), 0);
   config_register_addressmaps(get_options());
 
   strlcpy(address, "www.abc.com", sizeof(address));
@@ -189,7 +189,7 @@ test_config_addressmap(void *arg)
   config_free_lines(get_options_mutable()->AddressMap);
   addressmap_clear_configured();
   strlcpy(buf, "MapAddress * *.torserver.exit\n", sizeof(buf));
-  config_get_lines(buf, &(get_options_mutable()->AddressMap), 0, NULL);
+  config_get_lines(buf, &(get_options_mutable()->AddressMap), 0);
   config_register_addressmaps(get_options());
 
   strlcpy(address, "www.abc.com", sizeof(address));
@@ -4950,7 +4950,8 @@ test_config_include_limit(void *data)
   tor_snprintf(torrc_contents, sizeof(torrc_contents), "%%include %s",
                torrc_path);
   tt_int_op(write_str_to_file(torrc_path, torrc_contents, 0), OP_EQ, 0);
-  tt_int_op(config_get_lines(torrc_contents, &result, 0, NULL), OP_EQ, -1);
+  tt_int_op(config_get_lines_include(torrc_contents, &result, 0, NULL),
+            OP_EQ, -1);
 
  done:
   config_free_lines(result);
@@ -4979,7 +4980,8 @@ test_config_include_does_not_exist(void *data)
   tor_snprintf(torrc_contents, sizeof(torrc_contents), "%%include %s",
                missing_path);
 
-  tt_int_op(config_get_lines(torrc_contents, &result, 0, NULL), OP_EQ, -1);
+  tt_int_op(config_get_lines_include(torrc_contents, &result, 0, NULL),
+            OP_EQ, -1);
 
  done:
   config_free_lines(result);
@@ -5010,7 +5012,8 @@ test_config_include_error_in_included_file(void *data)
   tor_snprintf(torrc_contents, sizeof(torrc_contents), "%%include %s",
                invalid_path);
 
-  tt_int_op(config_get_lines(torrc_contents, &result, 0, NULL), OP_EQ, -1);
+  tt_int_op(config_get_lines_include(torrc_contents, &result, 0, NULL),
+            OP_EQ, -1);
 
  done:
   config_free_lines(result);
@@ -5051,8 +5054,11 @@ test_config_include_empty_file_folder(void *data)
                "%%include %s\n",
                folder_path, file_path);
 
-  tt_int_op(config_get_lines(torrc_contents, &result, 0, NULL), OP_EQ, 0);
+  int include_used;
+  tt_int_op(config_get_lines_include(torrc_contents, &result, 0,&include_used),
+            OP_EQ, 0);
   tt_ptr_op(result, OP_EQ, NULL);
+  tt_int_op(include_used, OP_EQ, 1);
 
  done:
   config_free_lines(result);
@@ -5100,8 +5106,11 @@ test_config_include_recursion_before_after(void *data)
     }
   }
 
-  tt_int_op(config_get_lines(file_contents, &result, 0, NULL), OP_EQ, 0);
+  int include_used;
+  tt_int_op(config_get_lines_include(file_contents, &result, 0, &include_used),
+            OP_EQ, 0);
   tt_ptr_op(result, OP_NE, NULL);
+  tt_int_op(include_used, OP_EQ, 1);
 
   int len = 0;
   config_line_t *next;
@@ -5160,8 +5169,11 @@ test_config_include_recursion_after_only(void *data)
     }
   }
 
-  tt_int_op(config_get_lines(file_contents, &result, 0, NULL), OP_EQ, 0);
+  int include_used;
+  tt_int_op(config_get_lines_include(file_contents, &result, 0, &include_used),
+            OP_EQ, 0);
   tt_ptr_op(result, OP_NE, NULL);
+  tt_int_op(include_used, OP_EQ, 1);
 
   int len = 0;
   config_line_t *next;
@@ -5241,8 +5253,11 @@ test_config_include_folder_order(void *data)
                "%%include %s\n",
                torrcd);
 
-  tt_int_op(config_get_lines(torrc_contents, &result, 0, NULL), OP_EQ, 0);
+  int include_used;
+  tt_int_op(config_get_lines_include(torrc_contents, &result, 0,&include_used),
+            OP_EQ, 0);
   tt_ptr_op(result, OP_NE, NULL);
+  tt_int_op(include_used, OP_EQ, 1);
 
   int len = 0;
   config_line_t *next;

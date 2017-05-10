@@ -376,7 +376,7 @@ storage_dir_map_labeled(storage_dir_t *dir,
   const char *nulp = memchr(m->data, '\0', m->size);
   if (! nulp)
     goto err;
-  if (labels_out && config_get_lines(m->data, labels_out, 0, NULL) < 0)
+  if (labels_out && config_get_lines(m->data, labels_out, 0) < 0)
     goto err;
   size_t offset = nulp - m->data + 1;
   tor_assert(offset <= m->size);

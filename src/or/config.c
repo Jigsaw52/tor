@@ -5130,7 +5130,8 @@ options_init_from_string(const char *cf_defaults, const char *cf,
     if (!body)
       continue;
     /* get config lines, assign them */
-    retval = config_get_lines(body, &cl, 1, body==cf ? &cf_has_include : NULL);
+    retval = config_get_lines_include(body, &cl, 1,
+                                      body == cf ? &cf_has_include : NULL);
     if (retval < 0) {
       err = SETOPT_ERR_PARSE;
       goto err;
@@ -5203,8 +5204,8 @@ options_init_from_string(const char *cf_defaults, const char *cf,
       if (!body)
         continue;
       /* get config lines, assign them */
-      retval = config_get_lines(body, &cl, 1,
-                                body == cf ? &cf_has_include : NULL);
+      retval = config_get_lines_include(body, &cl, 1,
+                                        body == cf ? &cf_has_include : NULL);
       if (retval < 0) {
         err = SETOPT_ERR_PARSE;
         goto err;

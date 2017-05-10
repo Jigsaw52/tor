@@ -212,7 +212,7 @@ dirserv_load_fingerprint_file(void)
   }
   tor_free(fname);
 
-  result = config_get_lines(cf, &front, 0, NULL);
+  result = config_get_lines(cf, &front, 0);
   tor_free(cf);
   if (result < 0) {
     log_warn(LD_CONFIG, "Error reading from fingerprint file");
@@ -2473,7 +2473,7 @@ dirserv_read_guardfraction_file_from_str(const char *guardfraction_file_str,
   int guards_applied_n = 0;
 
   /* Parse file and split it in lines */
-  ret_tmp = config_get_lines(guardfraction_file_str, &front, 0, NULL);
+  ret_tmp = config_get_lines(guardfraction_file_str, &front, 0);
   if (ret_tmp < 0) {
     log_warn(LD_CONFIG, "Error reading from guardfraction file");
     goto done;

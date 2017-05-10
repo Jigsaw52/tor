@@ -11,8 +11,9 @@
 #include "container.h"
 
 static int config_get_lines_aux(const char *string, config_line_t **result,
-                                int extended, int *has_include,
-                                int recursion_level, config_line_t **last);
+                                int extended, int allow_include,
+                                int *has_include, int recursion_level,
+                                config_line_t **last);
 static int config_get_file_list(char *path, smartlist_t *file_list);
 
 /** Helper: allocate a new configuration option mapping 'key' to 'val',
@@ -75,9 +76,9 @@ config_line_find(const config_line_t *lines,
  * <b>recursion_level</b> is the count of how many nested %includes we have.
  * Returns the a pointer to the last element of the <b>result</b> in
  * <b>last</b>. */
-int
+static int
 config_get_lines_aux(const char *string, config_line_t **result, int extended,
-                     int *has_include, int recursion_level,
+                     int allow_include, int *has_include, int recursion_level,
                      config_line_t **last)
 {
   config_line_t *list = NULL, *list_last = NULL;
@@ -120,7 +121,7 @@ config_get_lines_aux(const char *string, config_line_t **result, int extended,
         }
       }
 
-      if (!strcmp(k, "%include")) {
+      if (allow_include && !strcmp(k, "%include")) {
         include_used = 1;
         smartlist_t *config_files = smartlist_new();
         if (config_get_file_list(v, config_files) < 0) {
@@ -152,7 +153,8 @@ config_get_lines_aux(const char *string, config_line_t **result, int extended,
           config_line_t *included_list = NULL;
           config_line_t *included_list_last = NULL;
           if (config_get_lines_aux(included_conf, &included_list, extended,
-                                   has_include, recursion_level + 1,
+                                   allow_include, has_include,
+                                   recursion_level + 1,
                                    &included_list_last) < 0) {
             log_warn(LD_CONFIG, "Error parsing included configuration "
                      "file: \"%s\".", config_file);
@@ -220,10 +222,18 @@ config_get_lines_aux(const char *string, config_line_t **result, int extended,
  * If <b>extended</b> is set, then treat keys beginning with / and with + as
  * indicating "clear" and "append" respectively. */
 int
-config_get_lines(const char *string, config_line_t **result, int extended,
-                 int *has_include)
+config_get_lines_include(const char *string, config_line_t **result,
+                         int extended, int *has_include)
 {
-  return config_get_lines_aux(string, result, extended, has_include, 1, NULL);
+  return config_get_lines_aux(string, result, extended, 1, has_include, 1,
+                              NULL);
+}
+
+/** Same as config_get_lines_include but does not allow %include */
+int
+config_get_lines(const char *string, config_line_t **result, int extended)
+{
+  return config_get_lines_aux(string, result, extended, 0, NULL, 1, NULL);
 }
 
 /** Adds a list of configuration files present on <b>path</b> to
@@ -233,7 +243,7 @@ config_get_lines(const char *string, config_line_t **result, int extended,
  * whose name starts with a dot will be added to <b>file_list</b>.
  * Return 0 on success, -1 on failure. Ignores empty files.
  */
-int
+static int
 config_get_file_list(char *path, smartlist_t *file_list)
 {
   file_status_t file_type = file_status(path);
@@ -252,11 +262,8 @@ config_get_file_list(char *path, smartlist_t *file_list)
         continue;
       }
 
-      size_t fullname_len = (size_t) (strlen(path) + strlen(f) + 2);
-      char *fullname = tor_malloc_zero(fullname_len);
-      strlcat(fullname, path, fullname_len);
-      strlcat(fullname, PATH_SEPARATOR, fullname_len);
-      strlcat(fullname, f, fullname_len);
+      char *fullname;
+      tor_asprintf(&fullname, "%s"PATH_SEPARATOR"%s", path, f);
       tor_free(f);
 
       if (file_status(fullname) != FN_FILE) {
