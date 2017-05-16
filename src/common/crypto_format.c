@@ -125,17 +125,21 @@ crypto_read_tagged_contents_from_file(const char *fname,
 
 /** Encode <b>pkey</b> as a base64-encoded string, without trailing "="
  * characters, in the buffer <b>output</b>, which must have at least
- * CURVE25519_BASE64_UNPADDED_LEN+1 bytes available.  Return 0 on success, -1
+ * CURVE25519_BASE64_NOPAD_BUFSIZE bytes available.  Return 0 on success, -1
  * on failure. */
 int
 curve25519_public_to_base64(char *output,
                             const curve25519_public_key_t *pkey)
 {
-  char buf[CURVE25519_BASE64_PADDED_LEN+1];
-  base64_encode(buf, sizeof(buf),
-                (const char*)pkey->public_key, CURVE25519_PUBKEY_LEN, 0);
-  buf[CURVE25519_BASE64_UNPADDED_LEN] = '\0';
-  memcpy(output, buf, CURVE25519_BASE64_UNPADDED_LEN+1);
+  // base64_encode_nopad requires at least CURVE25519_BASE64_BUFSIZE
+  char buf[CURVE25519_BASE64_BUFSIZE];
+  int n = base64_encode_nopad(buf, sizeof(buf),
+                              (const uint8_t*)pkey->public_key,
+                              CURVE25519_PUBKEY_LEN);
+  if (n != CURVE25519_BASE64_NOPAD_LEN) {
+    return -1;
+  }
+  memcpy(output, buf, CURVE25519_BASE64_NOPAD_BUFSIZE);
   return 0;
 }
 
@@ -147,11 +151,11 @@ curve25519_public_from_base64(curve25519_public_key_t *pkey,
                               const char *input)
 {
   size_t len = strlen(input);
-  if (len == CURVE25519_BASE64_UNPADDED_LEN) {
+  if (len == CURVE25519_BASE64_NOPAD_LEN) {
     /* not padded */
     return digest256_from_base64((char*)pkey->public_key, input);
-  } else if (len == CURVE25519_BASE64_PADDED_LEN) {
-    char buf[CURVE25519_BASE64_PADDED_LEN+1];
+  } else if (len == CURVE25519_BASE64_LEN) {
+    char buf[CURVE25519_BASE64_BUFSIZE];
     if (base64_decode(buf, sizeof(buf), input, len) != CURVE25519_PUBKEY_LEN)
       return -1;
     memcpy(pkey->public_key, buf, CURVE25519_PUBKEY_LEN);

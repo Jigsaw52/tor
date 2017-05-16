@@ -3821,7 +3821,7 @@ dirvote_create_microdescriptor(const routerinfo_t *ri, int consensus_method)
 
   if (consensus_method >= MIN_METHOD_FOR_NTOR_KEY &&
       ri->onion_curve25519_pkey) {
-    char kbuf[CURVE25519_BASE64_UNPADDED_LEN+1];
+    char kbuf[CURVE25519_BASE64_NOPAD_BUFSIZE];
     curve25519_public_to_base64(kbuf, ri->onion_curve25519_pkey);
     smartlist_add_asprintf(chunks, "ntor-onion-key %s\n", kbuf);
   }

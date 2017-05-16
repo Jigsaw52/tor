@@ -2964,7 +2964,7 @@ router_dump_router_to_string(routerinfo_t *router,
   }
 
   if (router->onion_curve25519_pkey) {
-    char kbuf[CURVE25519_BASE64_UNPADDED_LEN+1];
+    char kbuf[CURVE25519_BASE64_NOPAD_BUFSIZE];
     curve25519_public_to_base64(kbuf, router->onion_curve25519_pkey);
     smartlist_add_asprintf(chunks, "ntor-onion-key %s\n", kbuf);
   } else {
