@@ -467,7 +467,7 @@ crypto_new_pk_from_rsa_(RSA *rsa)
   return env;
 }
 
-/** Helper, used by tor-checkkey.c and tor-gencert.c.  Return the RSA from a
+/** Helper, used by tor-gencert.c.  Return the RSA from a
  * crypto_pk_t. */
 RSA *
 crypto_pk_get_rsa_(crypto_pk_t *env)
@@ -3458,4 +3458,16 @@ crypto_global_cleanup(void)
 }
 
 /** @} */
+
+#ifdef USE_DMALLOC
+/** Tell the crypto library to use Tor's allocation functions rather than
+ * calling libc's allocation functions directly. Return 0 on success, -1
+ * on failure. */
+int
+crypto_use_tor_alloc_functions(void)
+{
+  int r = CRYPTO_set_mem_ex_functions(tor_malloc_, tor_realloc_, tor_free_);
+  return r ? 0 : -1;
+}
+#endif
 

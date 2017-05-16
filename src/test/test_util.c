@@ -2242,114 +2242,160 @@ test_util_pow2(void *arg)
   ;
 }
 
-/** Run unit tests for compression functions */
 static void
-test_util_gzip(void *arg)
+test_util_compress_impl(compress_method_t method)
 {
-  char *buf1=NULL, *buf2=NULL, *buf3=NULL, *cp1, *cp2;
-  const char *ccp2;
+  char *buf1=NULL, *buf2=NULL, *buf3=NULL;
   size_t len1, len2;
-  tor_zlib_state_t *state = NULL;
 
-  (void)arg;
+  tt_assert(tor_compress_supports_method(method));
+
   buf1 = tor_strdup("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAZAAAAAAAAAAAAAAAAAAAZ");
   tt_assert(detect_compression_method(buf1, strlen(buf1)) == UNKNOWN_METHOD);
 
-  tt_assert(!tor_gzip_compress(&buf2, &len1, buf1, strlen(buf1)+1,
-                               GZIP_METHOD));
-  tt_assert(buf2);
-  tt_assert(len1 < strlen(buf1));
-  tt_assert(detect_compression_method(buf2, len1) == GZIP_METHOD);
+  tt_assert(!tor_compress(&buf2, &len1, buf1, strlen(buf1)+1, method));
+  tt_assert(buf2 != NULL);
+  if (method == NO_METHOD) {
+    // The identity transform doesn't actually compress, and it isn't
+    // detectable as "the identity transform."
+    tt_int_op(len1, OP_EQ, strlen(buf1)+1);
+    tt_int_op(detect_compression_method(buf2, len1), OP_EQ, UNKNOWN_METHOD);
+  } else {
+    tt_int_op(len1, OP_LT, strlen(buf1));
+    tt_int_op(detect_compression_method(buf2, len1), OP_EQ, method);
+  }
 
-  tt_assert(!tor_gzip_uncompress(&buf3, &len2, buf2, len1,
-                                 GZIP_METHOD, 1, LOG_INFO));
-  tt_assert(buf3);
-  tt_int_op(strlen(buf1) + 1,OP_EQ, len2);
-  tt_str_op(buf1,OP_EQ, buf3);
-
-  tor_free(buf2);
-  tor_free(buf3);
-
-  tt_assert(!tor_gzip_compress(&buf2, &len1, buf1, strlen(buf1)+1,
-                                 ZLIB_METHOD));
-  tt_assert(buf2);
-  tt_assert(detect_compression_method(buf2, len1) == ZLIB_METHOD);
-
-  tt_assert(!tor_gzip_uncompress(&buf3, &len2, buf2, len1,
-                                   ZLIB_METHOD, 1, LOG_INFO));
-  tt_assert(buf3);
-  tt_int_op(strlen(buf1) + 1,OP_EQ, len2);
-  tt_str_op(buf1,OP_EQ, buf3);
+  tt_assert(!tor_uncompress(&buf3, &len2, buf2, len1, method, 1, LOG_INFO));
+  tt_assert(buf3 != NULL);
+  tt_int_op(strlen(buf1) + 1, OP_EQ, len2);
+  tt_str_op(buf1, OP_EQ, buf3);
+  tt_int_op(buf3[len2], OP_EQ, 0);
 
   /* Check whether we can uncompress concatenated, compressed strings. */
   tor_free(buf3);
   buf2 = tor_reallocarray(buf2, len1, 2);
   memcpy(buf2+len1, buf2, len1);
-  tt_assert(!tor_gzip_uncompress(&buf3, &len2, buf2, len1*2,
-                                   ZLIB_METHOD, 1, LOG_INFO));
-  tt_int_op((strlen(buf1)+1)*2,OP_EQ, len2);
-  tt_mem_op(buf3,OP_EQ,
+  tt_assert(!tor_uncompress(&buf3, &len2, buf2, len1*2, method, 1, LOG_INFO));
+  tt_int_op((strlen(buf1)+1)*2, OP_EQ, len2);
+  tt_mem_op(buf3, OP_EQ,
              "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAZAAAAAAAAAAAAAAAAAAAZ\0"
              "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAZAAAAAAAAAAAAAAAAAAAZ\0",
              (strlen(buf1)+1)*2);
+  tt_int_op(buf3[len2], OP_EQ, 0);
+
+  /* Check whether we can uncompress partial strings */
 
   tor_free(buf1);
   tor_free(buf2);
   tor_free(buf3);
 
-  /* Check whether we can uncompress partial strings. */
-  buf1 =
-    tor_strdup("String with low redundancy that won't be compressed much.");
-  tt_assert(!tor_gzip_compress(&buf2, &len1, buf1, strlen(buf1)+1,
-                                 ZLIB_METHOD));
-  tt_assert(len1>16);
-  /* when we allow an incomplete string, we should succeed.*/
-  tt_assert(!tor_gzip_uncompress(&buf3, &len2, buf2, len1-16,
-                                  ZLIB_METHOD, 0, LOG_INFO));
-  tt_assert(len2 > 5);
-  buf3[len2]='\0';
-  tt_assert(!strcmpstart(buf1, buf3));
+  size_t b1len = 1<<10;
+  if (method == ZSTD_METHOD) {
+    // zstd needs a big input before it starts generating output that it
+    // can partially decompress.
+    b1len = 1<<18;
+  }
+  buf1 = tor_malloc(b1len);
+  crypto_rand(buf1, b1len);
+  tt_assert(!tor_compress(&buf2, &len1, buf1, b1len, method));
+  tt_int_op(len1, OP_GT, 16);
+  /* when we allow an incomplete output we should succeed.*/
+  tt_assert(!tor_uncompress(&buf3, &len2, buf2, len1-16,
+                            method, 0, LOG_INFO));
+  tt_int_op(len2, OP_GT, 5);
+  tt_int_op(len2, OP_LE, len1);
+  tt_assert(fast_memeq(buf1, buf3, len2));
+  tt_int_op(buf3[len2], OP_EQ, 0);
 
-  /* when we demand a complete string, this must fail. */
+  /* when we demand a complete output from a real compression method, this
+   * must fail. */
   tor_free(buf3);
-  tt_assert(tor_gzip_uncompress(&buf3, &len2, buf2, len1-16,
-                                 ZLIB_METHOD, 1, LOG_INFO));
-  tt_assert(!buf3);
+  if (method != NO_METHOD) {
+    tt_assert(tor_uncompress(&buf3, &len2, buf2, len1-16,
+                             method, 1, LOG_INFO));
+    tt_assert(buf3 == NULL);
+  }
 
-  /* Now, try streaming compression. */
+ done:
   tor_free(buf1);
   tor_free(buf2);
   tor_free(buf3);
-  state = tor_zlib_new(1, ZLIB_METHOD, HIGH_COMPRESSION);
+}
+
+static void
+test_util_compress_stream_impl(compress_method_t method,
+                               compression_level_t level)
+{
+  char *buf1=NULL, *buf2=NULL, *buf3=NULL, *cp1, *cp2;
+  const char *ccp2;
+  size_t len1, len2;
+
+  tor_compress_state_t *state = NULL;
+  state = tor_compress_new(1, method, level);
   tt_assert(state);
   cp1 = buf1 = tor_malloc(1024);
   len1 = 1024;
   ccp2 = "ABCDEFGHIJABCDEFGHIJ";
   len2 = 21;
-  tt_assert(tor_zlib_process(state, &cp1, &len1, &ccp2, &len2, 0)
-              == TOR_ZLIB_OK);
-  tt_int_op(0,OP_EQ, len2); /* Make sure we compressed it all. */
+  tt_int_op(tor_compress_process(state, &cp1, &len1, &ccp2, &len2, 0),
+            OP_EQ, TOR_COMPRESS_OK);
+  tt_int_op(0, OP_EQ, len2); /* Make sure we compressed it all. */
   tt_assert(cp1 > buf1);
 
   len2 = 0;
   cp2 = cp1;
-  tt_assert(tor_zlib_process(state, &cp1, &len1, &ccp2, &len2, 1)
-              == TOR_ZLIB_DONE);
-  tt_int_op(0,OP_EQ, len2);
-  tt_assert(cp1 > cp2); /* Make sure we really added something. */
+  tt_int_op(tor_compress_process(state, &cp1, &len1, &ccp2, &len2, 1),
+            OP_EQ, TOR_COMPRESS_DONE);
+  tt_int_op(0, OP_EQ, len2);
+  if (method == NO_METHOD) {
+    tt_ptr_op(cp1, OP_EQ, cp2);
+  } else {
+    tt_assert(cp1 > cp2); /* Make sure we really added something. */
+  }
 
-  tt_assert(!tor_gzip_uncompress(&buf3, &len2, buf1, 1024-len1,
-                                  ZLIB_METHOD, 1, LOG_WARN));
+  tt_assert(!tor_uncompress(&buf3, &len2, buf1, 1024-len1,
+                            method, 1, LOG_WARN));
   /* Make sure it compressed right. */
   tt_str_op(buf3, OP_EQ, "ABCDEFGHIJABCDEFGHIJ");
-  tt_int_op(21,OP_EQ, len2);
+  tt_int_op(21, OP_EQ, len2);
 
  done:
   if (state)
-    tor_zlib_free(state);
+    tor_compress_free(state);
+  tor_free(buf1);
   tor_free(buf2);
   tor_free(buf3);
-  tor_free(buf1);
+}
+
+/** Run unit tests for compression functions */
+static void
+test_util_compress(void *arg)
+{
+  const char *methodname = arg;
+  tt_assert(methodname);
+
+  compress_method_t method = compression_method_get_by_name(methodname);
+  tt_int_op(method, OP_NE, UNKNOWN_METHOD);
+
+  if (! tor_compress_supports_method(method)) {
+    tt_skip();
+  }
+
+  compression_level_t levels[] = {
+    BEST_COMPRESSION,
+    HIGH_COMPRESSION,
+    MEDIUM_COMPRESSION,
+    LOW_COMPRESSION
+  };
+
+  test_util_compress_impl(method);
+
+  for (unsigned l = 0; l < ARRAY_LENGTH(levels); ++l) {
+    compression_level_t level = levels[l];
+    test_util_compress_stream_impl(method, level);
+  }
+ done:
+  ;
 }
 
 static void
@@ -2364,44 +2410,44 @@ test_util_gzip_compression_bomb(void *arg)
   char *one_mb = tor_malloc_zero(one_million);
   char *result = NULL;
   size_t result_len = 0;
-  tor_zlib_state_t *state = NULL;
+  tor_compress_state_t *state = NULL;
 
   /* Make sure we can't produce a compression bomb */
   setup_full_capture_of_logs(LOG_WARN);
-  tt_int_op(-1, OP_EQ, tor_gzip_compress(&result, &result_len,
-                                         one_mb, one_million,
-                                         ZLIB_METHOD));
+  tt_int_op(-1, OP_EQ, tor_compress(&result, &result_len,
+                                    one_mb, one_million,
+                                    ZLIB_METHOD));
   expect_single_log_msg_containing(
          "We compressed something and got an insanely high "
          "compression factor; other Tors would think this "
-         "was a zlib bomb.");
+         "was a compression bomb.");
   teardown_capture_of_logs();
 
   /* Here's a compression bomb that we made manually. */
   const char compression_bomb[1039] =
     { 0x78, 0xDA, 0xED, 0xC1, 0x31, 0x01, 0x00, 0x00, 0x00, 0xC2,
       0xA0, 0xF5, 0x4F, 0x6D, 0x08, 0x5F, 0xA0 /* .... */ };
-  tt_int_op(-1, OP_EQ, tor_gzip_uncompress(&result, &result_len,
-                                           compression_bomb, 1039,
-                                           ZLIB_METHOD, 0, LOG_WARN));
+  tt_int_op(-1, OP_EQ, tor_uncompress(&result, &result_len,
+                                      compression_bomb, 1039,
+                                      ZLIB_METHOD, 0, LOG_WARN));
 
   /* Now try streaming that. */
-  state = tor_zlib_new(0, ZLIB_METHOD, HIGH_COMPRESSION);
-  tor_zlib_output_t r;
+  state = tor_compress_new(0, ZLIB_METHOD, HIGH_COMPRESSION);
+  tor_compress_output_t r;
   const char *inp = compression_bomb;
   size_t inlen = 1039;
   do {
     char *outp = one_mb;
     size_t outleft = 4096; /* small on purpose */
-    r = tor_zlib_process(state, &outp, &outleft, &inp, &inlen, 0);
+    r = tor_compress_process(state, &outp, &outleft, &inp, &inlen, 0);
     tt_int_op(inlen, OP_NE, 0);
-  } while (r == TOR_ZLIB_BUF_FULL);
+  } while (r == TOR_COMPRESS_BUFFER_FULL);
 
-  tt_int_op(r, OP_EQ, TOR_ZLIB_ERR);
+  tt_int_op(r, OP_EQ, TOR_COMPRESS_ERROR);
 
  done:
   tor_free(one_mb);
-  tor_zlib_free(state);
+  tor_compress_free(state);
 }
 
 /** Run unit tests for mmap() wrapper functionality. */
@@ -5691,6 +5737,10 @@ test_util_htonll(void *arg)
 #define UTIL_TEST(name, flags)                          \
   { #name, test_util_ ## name, flags, NULL, NULL }
 
+#define COMPRESS(name, identifier)              \
+  { "compress/" #name, test_util_compress, 0, &passthrough_setup,       \
+    (char*)(identifier) }
+
 #ifdef _WIN32
 #define UTIL_TEST_NO_WIN(n, f) { #n, NULL, TT_SKIP, NULL, NULL }
 #define UTIL_TEST_WIN_ONLY(n, f) UTIL_TEST(n, (f))
@@ -5715,7 +5765,11 @@ struct testcase_t util_tests[] = {
   UTIL_LEGACY(strmisc),
   UTIL_TEST(parse_integer, 0),
   UTIL_LEGACY(pow2),
-  UTIL_LEGACY(gzip),
+  COMPRESS(zlib, "deflate"),
+  COMPRESS(gzip, "gzip"),
+  COMPRESS(lzma, "x-tor-lzma"),
+  COMPRESS(zstd, "x-zstd"),
+  COMPRESS(none, "identity"),
   UTIL_TEST(gzip_compression_bomb, TT_FORK),
   UTIL_LEGACY(datadir),
   UTIL_LEGACY(memarea),

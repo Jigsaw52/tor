@@ -7,6 +7,7 @@
 #include <math.h>
 
 #define CONFIG_PRIVATE
+#define CONTROL_PRIVATE
 #define DIRSERV_PRIVATE
 #define DIRVOTE_PRIVATE
 #define ROUTER_PRIVATE
@@ -19,6 +20,7 @@
 #include "or.h"
 #include "confparse.h"
 #include "config.h"
+#include "control.h"
 #include "crypto_ed25519.h"
 #include "directory.h"
 #include "dirserv.h"
@@ -908,6 +910,23 @@ mock_get_by_ei_desc_digest(const char *d)
   }
 }
 
+static signed_descriptor_t *
+mock_ei_get_by_ei_digest(const char *d)
+{
+  char hex[HEX_DIGEST_LEN+1];
+  base16_encode(hex, sizeof(hex), d, DIGEST_LEN);
+  signed_descriptor_t *sd = &sd_ei_minimal;
+
+  if (!strcmp(hex, "11E0EDF526950739F7769810FCACAB8C882FAEEE")) {
+    sd->signed_descriptor_body = (char *)EX_EI_MINIMAL;
+    sd->signed_descriptor_len = sizeof(EX_EI_MINIMAL);
+    sd->annotations_len = 0;
+    sd->saved_location = SAVED_NOWHERE;
+    return sd;
+  }
+  return NULL;
+}
+
 static smartlist_t *mock_ei_insert_list = NULL;
 static was_router_added_t
 mock_ei_insert(routerlist_t *rl, extrainfo_t *ei, int warn_if_incompatible)
@@ -994,6 +1013,37 @@ test_dir_load_extrainfo(void *arg)
   SMARTLIST_FOREACH(wanted, char *, cp, tor_free(cp));
   smartlist_free(wanted);
   tor_free(list);
+}
+
+static void
+test_dir_getinfo_extra(void *arg)
+{
+  int r;
+  char *answer = NULL;
+  const char *errmsg = NULL;
+
+  (void)arg;
+  MOCK(extrainfo_get_by_descriptor_digest, mock_ei_get_by_ei_digest);
+  r = getinfo_helper_dir(NULL, "extra-info/digest/"
+                         "11E0EDF526950739F7769810FCACAB8C882FAEEE", &answer,
+                         &errmsg);
+  tt_int_op(0, OP_EQ, r);
+  tt_ptr_op(NULL, OP_EQ, errmsg);
+  tt_str_op(answer, OP_EQ, EX_EI_MINIMAL);
+  tor_free(answer);
+
+  answer = NULL;
+  r = getinfo_helper_dir(NULL, "extra-info/digest/"
+                         "NOTAVALIDHEXSTRINGNOTAVALIDHEXSTRINGNOTA", &answer,
+                         &errmsg);
+  tt_int_op(0, OP_EQ, r);
+  /* getinfo_helper_dir() should maybe return an error here but doesn't */
+  tt_ptr_op(NULL, OP_EQ, errmsg);
+  /* In any case, there should be no answer for an invalid hex string. */
+  tt_ptr_op(NULL, OP_EQ, answer);
+
+ done:
+  UNMOCK(extrainfo_get_by_descriptor_digest);
 }
 
 static void
@@ -4530,15 +4580,7 @@ test_dir_should_use_directory_guards(void *data)
 }
 
 NS_DECL(void,
-directory_initiate_command_routerstatus, (const routerstatus_t *status,
-                                          uint8_t dir_purpose,
-                                          uint8_t router_purpose,
-                                          dir_indirection_t indirection,
-                                          const char *resource,
-                                          const char *payload,
-                                          size_t payload_len,
-                                          time_t if_modified_since,
-                                          circuit_guard_state_t *guardstate));
+directory_initiate_request, (directory_request_t *req));
 
 static void
 test_dir_should_not_init_request_to_ourselves(void *data)
@@ -4548,7 +4590,7 @@ test_dir_should_not_init_request_to_ourselves(void *data)
   crypto_pk_t *key = pk_generate(2);
   (void) data;
 
-  NS_MOCK(directory_initiate_command_routerstatus);
+  NS_MOCK(directory_initiate_request);
 
   clear_dir_servers();
   routerlist_free_all();
@@ -4563,15 +4605,15 @@ test_dir_should_not_init_request_to_ourselves(void *data)
   dir_server_add(ourself);
 
   directory_get_from_all_authorities(DIR_PURPOSE_FETCH_STATUS_VOTE, 0, NULL);
-  tt_int_op(CALLED(directory_initiate_command_routerstatus), OP_EQ, 0);
+  tt_int_op(CALLED(directory_initiate_request), OP_EQ, 0);
 
   directory_get_from_all_authorities(DIR_PURPOSE_FETCH_DETACHED_SIGNATURES, 0,
                                      NULL);
 
-  tt_int_op(CALLED(directory_initiate_command_routerstatus), OP_EQ, 0);
+  tt_int_op(CALLED(directory_initiate_request), OP_EQ, 0);
 
   done:
-    NS_UNMOCK(directory_initiate_command_routerstatus);
+    NS_UNMOCK(directory_initiate_request);
     clear_dir_servers();
     routerlist_free_all();
     crypto_pk_free(key);
@@ -4585,7 +4627,7 @@ test_dir_should_not_init_request_to_dir_auths_without_v3_info(void *data)
                                 | MICRODESC_DIRINFO;
   (void) data;
 
-  NS_MOCK(directory_initiate_command_routerstatus);
+  NS_MOCK(directory_initiate_request);
 
   clear_dir_servers();
   routerlist_free_all();
@@ -4596,14 +4638,14 @@ test_dir_should_not_init_request_to_dir_auths_without_v3_info(void *data)
   dir_server_add(ds);
 
   directory_get_from_all_authorities(DIR_PURPOSE_FETCH_STATUS_VOTE, 0, NULL);
-  tt_int_op(CALLED(directory_initiate_command_routerstatus), OP_EQ, 0);
+  tt_int_op(CALLED(directory_initiate_request), OP_EQ, 0);
 
   directory_get_from_all_authorities(DIR_PURPOSE_FETCH_DETACHED_SIGNATURES, 0,
                                      NULL);
-  tt_int_op(CALLED(directory_initiate_command_routerstatus), OP_EQ, 0);
+  tt_int_op(CALLED(directory_initiate_request), OP_EQ, 0);
 
   done:
-    NS_UNMOCK(directory_initiate_command_routerstatus);
+    NS_UNMOCK(directory_initiate_request);
     clear_dir_servers();
     routerlist_free_all();
 }
@@ -4614,7 +4656,7 @@ test_dir_should_init_request_to_dir_auths(void *data)
   dir_server_t *ds = NULL;
   (void) data;
 
-  NS_MOCK(directory_initiate_command_routerstatus);
+  NS_MOCK(directory_initiate_request);
 
   clear_dir_servers();
   routerlist_free_all();
@@ -4625,39 +4667,23 @@ test_dir_should_init_request_to_dir_auths(void *data)
   dir_server_add(ds);
 
   directory_get_from_all_authorities(DIR_PURPOSE_FETCH_STATUS_VOTE, 0, NULL);
-  tt_int_op(CALLED(directory_initiate_command_routerstatus), OP_EQ, 1);
+  tt_int_op(CALLED(directory_initiate_request), OP_EQ, 1);
 
   directory_get_from_all_authorities(DIR_PURPOSE_FETCH_DETACHED_SIGNATURES, 0,
                                      NULL);
-  tt_int_op(CALLED(directory_initiate_command_routerstatus), OP_EQ, 2);
+  tt_int_op(CALLED(directory_initiate_request), OP_EQ, 2);
 
   done:
-    NS_UNMOCK(directory_initiate_command_routerstatus);
+    NS_UNMOCK(directory_initiate_request);
     clear_dir_servers();
     routerlist_free_all();
 }
 
 void
-NS(directory_initiate_command_routerstatus)(const routerstatus_t *status,
-                                            uint8_t dir_purpose,
-                                            uint8_t router_purpose,
-                                            dir_indirection_t indirection,
-                                            const char *resource,
-                                            const char *payload,
-                                            size_t payload_len,
-                                            time_t if_modified_since,
-                                            circuit_guard_state_t *guardstate)
+NS(directory_initiate_request)(directory_request_t *req)
 {
-  (void)status;
-  (void)dir_purpose;
-  (void)router_purpose;
-  (void)indirection;
-  (void)resource;
-  (void)payload;
-  (void)payload_len;
-  (void)if_modified_since;
-  (void)guardstate;
-  CALLED(directory_initiate_command_routerstatus)++;
+  (void)req;
+  CALLED(directory_initiate_request)++;
 }
 
 static void
@@ -5968,6 +5994,7 @@ struct testcase_t dir_tests[] = {
   DIR(parse_router_list, TT_FORK),
   DIR(load_routers, TT_FORK),
   DIR(load_extrainfo, TT_FORK),
+  DIR(getinfo_extra, 0),
   DIR_LEGACY(versions),
   DIR_LEGACY(fp_pairs),
   DIR(split_fps, 0),

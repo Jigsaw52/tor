@@ -1,6 +1,138 @@
 Changes in version 0.3.1.1-alpha - 2017-??-??
 
 
+Changes in version 0.3.0.7 - 2017-05-15
+  Tor 0.3.0.7 fixes a medium-severity security bug in earlier versions
+  of Tor 0.3.0.x, where an attacker could cause a Tor relay process
+  to exit. Relays running earlier versions of Tor 0.3.0.x should upgrade;
+  clients are not affected.
+
+  o Major bugfixes (hidden service directory, security):
+    - Fix an assertion failure in the hidden service directory code, which
+      could be used by an attacker to remotely cause a Tor relay process to
+      exit. Relays running earlier versions of Tor 0.3.0.x should upgrade.
+      should upgrade. This security issue is tracked as TROVE-2017-002.
+      Fixes bug 22246; bugfix on 0.3.0.1-alpha.
+
+  o Minor features:
+    - Update geoip and geoip6 to the May 2 2017 Maxmind GeoLite2
+      Country database.
+
+  o Minor features (future-proofing):
+    - Tor no longer refuses to download microdescriptors or descriptors
+      if they are listed as "published in the future". This change will
+      eventually allow us to stop listing meaningful "published" dates
+      in microdescriptor consensuses, and thereby allow us to reduce the
+      resources required to download consensus diffs by over 50%.
+      Implements part of ticket 21642; implements part of proposal 275.
+
+  o Minor bugfixes (Linux seccomp2 sandbox):
+    - The getpid() system call is now permitted under the Linux seccomp2
+      sandbox, to avoid crashing with versions of OpenSSL (and other
+      libraries) that attempt to learn the process's PID by using the
+      syscall rather than the VDSO code. Fixes bug 21943; bugfix
+      on 0.2.5.1-alpha.
+
+
+Changes in version 0.3.0.6 - 2017-04-26
+  Tor 0.3.0.6 is the first stable release of the Tor 0.3.0 series.
+
+  With the 0.3.0 series, clients and relays now use Ed25519 keys to
+  authenticate their link connections to relays, rather than the old
+  RSA1024 keys that they used before. (Circuit crypto has been
+  Curve25519-authenticated since 0.2.4.8-alpha.) We have also replaced
+  the guard selection and replacement algorithm to behave more robustly
+  in the presence of unreliable networks, and to resist guard-
+  capture attacks.
+
+  This series also includes numerous other small features and bugfixes,
+  along with more groundwork for the upcoming hidden-services revamp.
+
+  Per our stable release policy, we plan to support the Tor 0.3.0
+  release series for at least the next nine months, or for three months
+  after the first stable release of the 0.3.1 series: whichever is
+  longer. If you need a release with long-term support, we recommend
+  that you stay with the 0.2.9 series.
+
+  Below are the changes since 0.3.0.5-rc. For a list of all changes
+  since 0.2.9, see the ReleaseNotes file.
+
+  o Minor features (geoip):
+    - Update geoip and geoip6 to the April 4 2017 Maxmind GeoLite2
+      Country database.
+
+  o Minor bugfixes (control port):
+    - The GETINFO extra-info/digest/<digest> command was broken because
+      of a wrong base16 decode return value check, introduced when
+      refactoring that API. Fixes bug 22034; bugfix on 0.2.9.1-alpha.
+
+  o Minor bugfixes (crash prevention):
+    - Fix a (currently untriggerable, but potentially dangerous) crash
+      bug when base32-encoding inputs whose sizes are not a multiple of
+      5. Fixes bug 21894; bugfix on 0.2.9.1-alpha.
+
+
+Changes in version 0.3.0.5-rc - 2017-04-05
+  Tor 0.3.0.5-rc fixes a few remaining bugs, large and small, in the
+  0.3.0 release series.
+
+  This is the second release candidate in the Tor 0.3.0 series, and has
+  much fewer changes than the first. If we find no new bugs or
+  regressions here, the first stable 0.3.0 release will be nearly
+  identical to it.
+
+  o Major bugfixes (crash, directory connections):
+    - Fix a rare crash when sending a begin cell on a circuit whose
+      linked directory connection had already been closed. Fixes bug
+      21576; bugfix on 0.2.9.3-alpha. Reported by Alec Muffett.
+
+  o Major bugfixes (guard selection):
+    - Fix a guard selection bug where Tor would refuse to bootstrap in
+      some cases if the user swapped a bridge for another bridge in
+      their configuration file. Fixes bug 21771; bugfix on 0.3.0.1-alpha.
+      Reported by "torvlnt33r".
+
+  o Minor features (geoip):
+    - Update geoip and geoip6 to the March 7 2017 Maxmind GeoLite2
+      Country database.
+
+  o Minor bugfix (compilation):
+    - Fix a warning when compiling hs_service.c. Previously, it had no
+      exported symbols when compiled for libor.a, resulting in a
+      compilation warning from clang. Fixes bug 21825; bugfix
+      on 0.3.0.1-alpha.
+
+  o Minor bugfixes (hidden services):
+    - Make hidden services check for failed intro point connections,
+      even when they have exceeded their intro point creation limit.
+      Fixes bug 21596; bugfix on 0.2.7.2-alpha. Reported by Alec Muffett.
+    - Make hidden services with 8 to 10 introduction points check for
+      failed circuits immediately after startup. Previously, they would
+      wait for 5 minutes before performing their first checks. Fixes bug
+      21594; bugfix on 0.2.3.9-alpha. Reported by Alec Muffett.
+
+  o Minor bugfixes (memory leaks):
+    - Fix a memory leak when using GETCONF on a port option. Fixes bug
+      21682; bugfix on 0.3.0.3-alpha.
+
+  o Minor bugfixes (relay):
+    - Avoid a double-marked-circuit warning that could happen when we
+      receive DESTROY cells under heavy load. Fixes bug 20059; bugfix
+      on 0.1.0.1-rc.
+
+  o Minor bugfixes (tests):
+    - Run the entry_guard_parse_from_state_full() test with the time set
+      to a specific date. (The guard state that this test was parsing
+      contained guards that had expired since the test was first
+      written.) Fixes bug 21799; bugfix on 0.3.0.1-alpha.
+
+  o Documentation:
+    - Update the description of the directory server options in the
+      manual page, to clarify that a relay no longer needs to set
+      DirPort in order to be a directory cache. Closes ticket 21720.
+
+
+
 Changes in version 0.2.8.13 - 2017-03-03
   Tor 0.2.8.13 backports a security fix from later Tor
   releases.  Anybody running Tor 0.2.8.12 or earlier should upgrade to this

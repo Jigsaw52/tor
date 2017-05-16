@@ -20,7 +20,7 @@
 #endif
 
 /** Malloc mprotect limit in bytes. */
-#define MALLOC_MP_LIM 1048576
+#define MALLOC_MP_LIM (16*1024*1024)
 
 #include <stdio.h>
 #include <string.h>
@@ -155,6 +155,7 @@ static int filter_nopar_gen[] = {
 #ifdef __NR_getgid32
     SCMP_SYS(getgid32),
 #endif
+    SCMP_SYS(getpid),
 #ifdef __NR_getrlimit
     SCMP_SYS(getrlimit),
 #endif

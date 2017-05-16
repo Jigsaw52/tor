@@ -12,6 +12,8 @@ char *consensus_diff_generate(const char *cons1,
 char *consensus_diff_apply(const char *consensus,
                            const char *diff);
 
+int looks_like_a_consensus_diff(const char *document, size_t len);
+
 #ifdef CONSDIFF_PRIVATE
 struct memarea_t;
 
@@ -84,6 +86,9 @@ STATIC int line_str_eq(const cdline_t *a, const char *b);
 MOCK_DECL(STATIC int,
           consensus_compute_digest,(const char *cons,
                                     consensus_digest_t *digest_out));
+MOCK_DECL(STATIC int,
+          consensus_compute_digest_as_signed,(const char *cons,
+                                              consensus_digest_t *digest_out));
 MOCK_DECL(STATIC int,
           consensus_digest_eq,(const uint8_t *d1,
                                const uint8_t *d2));

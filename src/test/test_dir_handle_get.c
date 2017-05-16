@@ -12,8 +12,10 @@
 #include "or.h"
 #include "config.h"
 #include "connection.h"
+#include "consdiffmgr.h"
 #include "directory.h"
 #include "test.h"
+#include "compress.h"
 #include "connection.h"
 #include "rendcommon.h"
 #include "rendcache.h"
@@ -28,7 +30,6 @@
 #include "networkstatus.h"
 #include "geoip.h"
 #include "dirserv.h"
-#include "torgzip.h"
 #include "dirvote.h"
 #include "log_test_helpers.h"
 
@@ -63,6 +64,7 @@ new_dir_conn(void)
 {
   dir_connection_t *conn = dir_connection_new(AF_INET);
   tor_addr_from_ipv4h(&conn->base_.addr, 0x7f000001);
+  TO_CONN(conn)->address = tor_strdup("127.0.0.1");
   return conn;
 }
 
@@ -465,6 +467,8 @@ init_mock_options(void)
   mock_options = tor_malloc(sizeof(or_options_t));
   memset(mock_options, 0, sizeof(or_options_t));
   mock_options->TestingTorNetwork = 1;
+  mock_options->DataDirectory = tor_strdup(get_fname_rnd("datadir_tmp"));
+  check_private_dir(mock_options->DataDirectory, CPD_CREATE, NULL);
 }
 
 static const or_options_t *
@@ -501,14 +505,6 @@ test_dir_handle_get_micro_d(void *data)
 
   /* SETUP */
   init_mock_options();
-  const char *fn = get_fname("dir_handle_datadir_test1");
-  mock_options->DataDirectory = tor_strdup(fn);
-
-#ifdef _WIN32
-  tt_int_op(0, OP_EQ, mkdir(mock_options->DataDirectory));
-#else
-  tt_int_op(0, OP_EQ, mkdir(mock_options->DataDirectory, 0700));
-#endif
 
   /* Add microdesc to cache */
   crypto_digest256(digest, microdesc, strlen(microdesc), DIGEST_SHA256);
@@ -568,14 +564,6 @@ test_dir_handle_get_micro_d_server_busy(void *data)
 
   /* SETUP */
   init_mock_options();
-  const char *fn = get_fname("dir_handle_datadir_test2");
-  mock_options->DataDirectory = tor_strdup(fn);
-
-#ifdef _WIN32
-  tt_int_op(0, OP_EQ, mkdir(mock_options->DataDirectory));
-#else
-  tt_int_op(0, OP_EQ, mkdir(mock_options->DataDirectory, 0700));
-#endif
 
   /* Add microdesc to cache */
   crypto_digest256(digest, microdesc, strlen(microdesc), DIGEST_SHA256);
@@ -1621,8 +1609,13 @@ test_dir_handle_get_status_vote_current_consensus_ns_not_enough_sigs(void* d)
   /* init mock */
   mock_ns_val = tor_malloc_zero(sizeof(networkstatus_t));
   mock_ns_val->flavor = FLAV_NS;
+  mock_ns_val->type = NS_TYPE_CONSENSUS;
   mock_ns_val->voters = smartlist_new();
-  mock_ns_val->valid_until = time(NULL);
+  mock_ns_val->valid_after = time(NULL) - 1800;
+  mock_ns_val->valid_until = time(NULL) - 60;
+
+  #define NETWORK_STATUS "some network status string"
+  consdiffmgr_add_consensus(NETWORK_STATUS, mock_ns_val);
 
   /* init mock */
   init_mock_options();
@@ -1710,10 +1703,17 @@ test_dir_handle_get_status_vote_current_consensus_too_old(void *data)
   (void)data;
 
   mock_ns_val = tor_malloc_zero(sizeof(networkstatus_t));
+  mock_ns_val->type = NS_TYPE_CONSENSUS;
   mock_ns_val->flavor = FLAV_MICRODESC;
-  mock_ns_val->valid_until = time(NULL) - (60 * 60 * 24) - 1;
+  mock_ns_val->valid_after = time(NULL) - (24 * 60 * 60 + 1800);
+  mock_ns_val->fresh_until = time(NULL) - (24 * 60 * 60 + 900);
+  mock_ns_val->valid_until = time(NULL) - (24 * 60 * 60 + 20);
+
+  #define NETWORK_STATUS "some network status string"
+  consdiffmgr_add_consensus(NETWORK_STATUS, mock_ns_val);
 
   init_mock_options();
+
   MOCK(get_options, mock_get_options);
   MOCK(connection_write_to_buf_impl_, connection_write_to_buf_mock);
   MOCK(networkstatus_get_latest_consensus_by_flavor, mock_ns_get_by_flavor);
@@ -1734,6 +1734,17 @@ test_dir_handle_get_status_vote_current_consensus_too_old(void *data)
 
   tor_free(header);
   teardown_capture_of_logs();
+  tor_free(mock_ns_val);
+
+  mock_ns_val = tor_malloc_zero(sizeof(networkstatus_t));
+  mock_ns_val->type = NS_TYPE_CONSENSUS;
+  mock_ns_val->flavor = FLAV_NS;
+  mock_ns_val->valid_after = time(NULL) - (24 * 60 * 60 + 1800);
+  mock_ns_val->fresh_until = time(NULL) - (24 * 60 * 60 + 900);
+  mock_ns_val->valid_until = time(NULL) - (24 * 60 * 60 + 20);
+
+  #define NETWORK_STATUS "some network status string"
+  consdiffmgr_add_consensus(NETWORK_STATUS, mock_ns_val);
 
   setup_capture_of_logs(LOG_WARN);
 
@@ -1772,12 +1783,26 @@ static void
 status_vote_current_consensus_ns_test(char **header, char **body,
                                       size_t *body_len)
 {
-  common_digests_t digests;
   dir_connection_t *conn = NULL;
 
   #define NETWORK_STATUS "some network status string"
+#if 0
+  common_digests_t digests;
+  uint8_t sha3[DIGEST256_LEN];
+  memset(&digests, 0x60, sizeof(digests));
+  memset(sha3, 0x06, sizeof(sha3));
   dirserv_set_cached_consensus_networkstatus(NETWORK_STATUS, "ns", &digests,
+                                             sha3,
                                              time(NULL));
+#endif
+  networkstatus_t *ns = tor_malloc_zero(sizeof(networkstatus_t));
+  ns->type = NS_TYPE_CONSENSUS;
+  ns->flavor = FLAV_NS;
+  ns->valid_after = time(NULL) - 1800;
+  ns->fresh_until = time(NULL) - 900;
+  ns->valid_until = time(NULL) - 60;
+  consdiffmgr_add_consensus(NETWORK_STATUS, ns);
+  networkstatus_vote_free(ns);
 
   MOCK(connection_write_to_buf_impl_, connection_write_to_buf_mock);
 
@@ -1790,7 +1815,6 @@ status_vote_current_consensus_ns_test(char **header, char **body,
   tt_str_op("ab", OP_EQ, geoip_get_country_name(1));
 
   conn = new_dir_conn();
-  TO_CONN(conn)->address = tor_strdup("127.0.0.1");
 
   tt_int_op(0, OP_EQ, directory_handle_command_get(conn,
     GET("/tor/status-vote/current/consensus-ns"), NULL, 0));
@@ -1832,8 +1856,8 @@ test_dir_handle_get_status_vote_current_consensus_ns(void* data)
                                                             comp_body_used);
   tt_int_op(ZLIB_METHOD, OP_EQ, compression);
 
-  tor_gzip_uncompress(&body, &body_used, comp_body, comp_body_used,
-                      compression, 0, LOG_PROTOCOL_WARN);
+  tor_uncompress(&body, &body_used, comp_body, comp_body_used,
+                 compression, 0, LOG_PROTOCOL_WARN);
 
   tt_str_op(NETWORK_STATUS, OP_EQ, body);
   tt_int_op(strlen(NETWORK_STATUS), OP_EQ, body_used);
@@ -2497,6 +2521,53 @@ test_dir_handle_get_status_vote_current_authority(void* data)
     dirvote_free_all();
 }
 
+static void
+test_dir_handle_get_parse_accept_encoding(void *arg)
+{
+  (void)arg;
+  const unsigned B_NONE = 1u << NO_METHOD;
+  const unsigned B_ZLIB = 1u << ZLIB_METHOD;
+  const unsigned B_GZIP = 1u << GZIP_METHOD;
+  const unsigned B_LZMA = 1u << LZMA_METHOD;
+  const unsigned B_ZSTD = 1u << ZSTD_METHOD;
+
+  unsigned encodings;
+
+  encodings = parse_accept_encoding_header("");
+  tt_uint_op(B_NONE, OP_EQ, encodings);
+
+  encodings = parse_accept_encoding_header("  ");
+  tt_uint_op(B_NONE, OP_EQ, encodings);
+
+  encodings = parse_accept_encoding_header("dewey, cheatham, and howe ");
+  tt_uint_op(B_NONE, OP_EQ, encodings);
+
+  encodings = parse_accept_encoding_header("dewey, cheatham, and gzip");
+  tt_uint_op(B_NONE, OP_EQ, encodings);
+
+  encodings = parse_accept_encoding_header("dewey, cheatham, and, gzip");
+  tt_uint_op(B_NONE|B_GZIP, OP_EQ, encodings);
+
+  encodings = parse_accept_encoding_header(" gzip");
+  tt_uint_op(B_NONE|B_GZIP, OP_EQ, encodings);
+
+  encodings = parse_accept_encoding_header("gzip");
+  tt_uint_op(B_NONE|B_GZIP, OP_EQ, encodings);
+
+  encodings = parse_accept_encoding_header("x-zstd, deflate, x-tor-lzma");
+  tt_uint_op(B_NONE|B_ZLIB|B_ZSTD|B_LZMA, OP_EQ, encodings);
+
+  encodings = parse_accept_encoding_header(
+                                        "x-zstd, deflate, x-tor-lzma, gzip");
+  tt_uint_op(B_NONE|B_ZLIB|B_ZSTD|B_LZMA|B_GZIP, OP_EQ, encodings);
+
+  encodings = parse_accept_encoding_header("x-zstd,deflate,x-tor-lzma,gzip");
+  tt_uint_op(B_NONE|B_ZLIB|B_ZSTD|B_LZMA|B_GZIP, OP_EQ, encodings);
+
+ done:
+  ;
+}
+
 #define DIR_HANDLE_CMD(name,flags) \
   { #name, test_dir_handle_get_##name, (flags), NULL, NULL }
 
@@ -2541,11 +2612,11 @@ struct testcase_t dir_handle_get_tests[] = {
   DIR_HANDLE_CMD(status_vote_current_authority, 0),
   DIR_HANDLE_CMD(status_vote_next_authority_not_found, 0),
   DIR_HANDLE_CMD(status_vote_next_authority, 0),
-  DIR_HANDLE_CMD(status_vote_current_consensus_ns_not_enough_sigs, 0),
-  DIR_HANDLE_CMD(status_vote_current_consensus_ns_not_found, 0),
-  DIR_HANDLE_CMD(status_vote_current_consensus_too_old, 0),
-  DIR_HANDLE_CMD(status_vote_current_consensus_ns_busy, 0),
-  DIR_HANDLE_CMD(status_vote_current_consensus_ns, 0),
+  DIR_HANDLE_CMD(status_vote_current_consensus_ns_not_enough_sigs, TT_FORK),
+  DIR_HANDLE_CMD(status_vote_current_consensus_ns_not_found, TT_FORK),
+  DIR_HANDLE_CMD(status_vote_current_consensus_too_old, TT_FORK),
+  DIR_HANDLE_CMD(status_vote_current_consensus_ns_busy, TT_FORK),
+  DIR_HANDLE_CMD(status_vote_current_consensus_ns, TT_FORK),
   DIR_HANDLE_CMD(status_vote_current_d_not_found, 0),
   DIR_HANDLE_CMD(status_vote_next_d_not_found, 0),
   DIR_HANDLE_CMD(status_vote_d, 0),
@@ -2555,6 +2626,7 @@ struct testcase_t dir_handle_get_tests[] = {
   DIR_HANDLE_CMD(status_vote_next_consensus_signatures_not_found, 0),
   DIR_HANDLE_CMD(status_vote_next_consensus_signatures_busy, 0),
   DIR_HANDLE_CMD(status_vote_next_consensus_signatures, 0),
+  DIR_HANDLE_CMD(parse_accept_encoding, 0),
   END_OF_TESTCASES
 };
 

@@ -210,8 +210,29 @@ test_hs_desc_event(void *arg)
   tt_str_op(received_msg,OP_EQ, expected_msg);
   tor_free(received_msg);
 
-  /* test valid content. */
+  /* test no HSDir fingerprint type */
+  rend_query.auth_type = REND_NO_AUTH;
+  control_event_hs_descriptor_failed(&rend_query.base_, NULL,
+                                     "QUERY_NO_HSDIR");
+  expected_msg = "650 HS_DESC FAILED "STR_HS_ADDR" NO_AUTH " \
+                 "UNKNOWN REASON=QUERY_NO_HSDIR\r\n";
+  tt_assert(received_msg);
+  tt_str_op(received_msg,OP_EQ, expected_msg);
+  tor_free(received_msg);
+
+  /* Test invalid content with no HSDir fingerprint. */
   char *exp_msg;
+  control_event_hs_descriptor_content(rend_query.onion_address,
+                                      STR_HS_CONTENT_DESC_ID, NULL, NULL);
+  tor_asprintf(&exp_msg, "650+HS_DESC_CONTENT " STR_HS_ADDR " "\
+               STR_HS_CONTENT_DESC_ID " UNKNOWN" \
+               "\r\n\r\n.\r\n650 OK\r\n");
+  tt_assert(received_msg);
+  tt_str_op(received_msg, OP_EQ, exp_msg);
+  tor_free(received_msg);
+  tor_free(exp_msg);
+
+  /* test valid content. */
   control_event_hs_descriptor_content(rend_query.onion_address,
                                       STR_HS_CONTENT_DESC_ID, HSDIR_EXIST_ID,
                                       hs_desc_content);
@@ -821,7 +842,9 @@ test_prune_services_on_reload(void *arg)
     smartlist_add(old, e1);
     /* Only put the non ephemeral in the new list. */
     smartlist_add(new, s1);
-    prune_services_on_reload(old, new);
+    set_rend_service_list(old);
+    set_rend_rend_service_staging_list(new);
+    rend_service_prune_list_impl_();
     /* We expect that the ephemeral one is in the new list but removed from
      * the old one. */
     tt_int_op(smartlist_len(old), OP_EQ, 1);
@@ -840,7 +863,9 @@ test_prune_services_on_reload(void *arg)
      * one. */
     smartlist_add(old, s1);
     smartlist_add(old, e1);
-    prune_services_on_reload(old, new);
+    set_rend_service_list(old);
+    set_rend_rend_service_staging_list(new);
+    rend_service_prune_list_impl_();
     tt_int_op(smartlist_len(old), OP_EQ, 1);
     tt_assert(smartlist_get(old, 0) == s1);
     tt_int_op(smartlist_len(new), OP_EQ, 1);
@@ -855,7 +880,9 @@ test_prune_services_on_reload(void *arg)
      * list being completely different. */
     smartlist_add(new, s1);
     smartlist_add(new, e1);
-    prune_services_on_reload(old, new);
+    set_rend_service_list(old);
+    set_rend_rend_service_staging_list(new);
+    rend_service_prune_list_impl_();
     tt_int_op(smartlist_len(old), OP_EQ, 0);
     tt_int_op(smartlist_len(new), OP_EQ, 2);
     tt_assert(smartlist_get(new, 0) == s1);
@@ -871,7 +898,9 @@ test_prune_services_on_reload(void *arg)
     /* Setup our list. */
     smartlist_add(old, s1);
     smartlist_add(new, s2);
-    prune_services_on_reload(old, new);
+    set_rend_service_list(old);
+    set_rend_rend_service_staging_list(new);
+    rend_service_prune_list_impl_();
     tt_int_op(smartlist_len(old), OP_EQ, 1);
     /* Intro nodes have been moved to the s2 in theory so it must be empty. */
     tt_int_op(smartlist_len(s1->intro_nodes), OP_EQ, 0);
@@ -892,7 +921,9 @@ test_prune_services_on_reload(void *arg)
     /* Test two ephemeral services. */
     smartlist_add(old, e1);
     smartlist_add(old, e2);
-    prune_services_on_reload(old, new);
+    set_rend_service_list(old);
+    set_rend_rend_service_staging_list(new);
+    rend_service_prune_list_impl_();
     /* Check if they've all been transfered. */
     tt_int_op(smartlist_len(old), OP_EQ, 0);
     tt_int_op(smartlist_len(new), OP_EQ, 2);

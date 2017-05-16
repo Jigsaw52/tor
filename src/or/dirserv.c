@@ -13,6 +13,7 @@
 #include "command.h"
 #include "connection.h"
 #include "connection_or.h"
+#include "conscache.h"
 #include "control.h"
 #include "directory.h"
 #include "dirserv.h"
@@ -283,6 +284,13 @@ dirserv_router_get_status(const routerinfo_t *router, const char **msg,
     return FP_REJECT;
   }
 
+  /* Check for the more usual versions to reject a router first. */
+  const uint32_t r = dirserv_get_status_impl(d, router->nickname,
+                                             router->addr, router->or_port,
+                                             router->platform, msg, severity);
+  if (r)
+    return r;
+
   /* dirserv_get_status_impl already rejects versions older than 0.2.4.18-rc,
    * and onion_curve25519_pkey was introduced in 0.2.4.8-alpha.
    * But just in case a relay doesn't provide or lies about its version, or
@@ -333,9 +341,7 @@ dirserv_router_get_status(const routerinfo_t *router, const char **msg,
     }
   }
 
-  return dirserv_get_status_impl(d, router->nickname,
-                                 router->addr, router->or_port,
-                                 router->platform, msg, severity);
+  return 0;
 }
 
 /** Return true if there is no point in downloading the router described by
@@ -570,6 +576,8 @@ dirserv_add_multiple_descriptors(const char *desc, uint8_t purpose,
                    !general ? router_purpose_to_string(purpose) : "",
                    !general ? "\n" : "")<0) {
     *msg = "Couldn't format annotations";
+    /* XXX Not cool: we return -1 below, but (was_router_added_t)-1 is
+     * ROUTER_BAD_EI, which isn't what's gone wrong here. :( */
     return -1;
   }
 
@@ -1176,8 +1184,8 @@ new_cached_dir(char *s, time_t published)
   d->dir = s;
   d->dir_len = strlen(s);
   d->published = published;
-  if (tor_gzip_compress(&(d->dir_z), &(d->dir_z_len), d->dir, d->dir_len,
-                        ZLIB_METHOD)) {
+  if (tor_compress(&(d->dir_compressed), &(d->dir_compressed_len),
+                   d->dir, d->dir_len, ZLIB_METHOD)) {
     log_warn(LD_BUG, "Error compressing directory");
   }
   return d;
@@ -1188,7 +1196,7 @@ static void
 clear_cached_dir(cached_dir_t *d)
 {
   tor_free(d->dir);
-  tor_free(d->dir_z);
+  tor_free(d->dir_compressed);
   memset(d, 0, sizeof(cached_dir_t));
 }
 
@@ -1211,6 +1219,7 @@ void
 dirserv_set_cached_consensus_networkstatus(const char *networkstatus,
                                            const char *flavor_name,
                                            const common_digests_t *digests,
+                                           const uint8_t *sha3_as_signed,
                                            time_t published)
 {
   cached_dir_t *new_networkstatus;
@@ -1220,6 +1229,8 @@ dirserv_set_cached_consensus_networkstatus(const char *networkstatus,
 
   new_networkstatus = new_cached_dir(tor_strdup(networkstatus), published);
   memcpy(&new_networkstatus->digests, digests, sizeof(common_digests_t));
+  memcpy(&new_networkstatus->digest_sha3_as_signed, sha3_as_signed,
+         DIGEST256_LEN);
   old_networkstatus = strmap_set(cached_consensuses, flavor_name,
                                  new_networkstatus);
   if (old_networkstatus)
@@ -3392,11 +3403,41 @@ spooled_resource_new(dir_spool_source_t source,
     default:
       spooled->spool_eagerly = 1;
       break;
+    case DIR_SPOOL_CONSENSUS_CACHE_ENTRY:
+      tor_assert_unreached();
+      break;
   }
   tor_assert(digestlen <= sizeof(spooled->digest));
   if (digest)
     memcpy(spooled->digest, digest, digestlen);
   return spooled;
+}
+
+/**
+ * Create a new spooled_resource_t to spool the contents of <b>entry</b> to
+ * the user.  Return the spooled object on success, or NULL on failure (which
+ * is probably caused by a failure to map the body of the item from disk).
+ *
+ * Adds a reference to entry's reference counter.
+ */
+spooled_resource_t *
+spooled_resource_new_from_cache_entry(consensus_cache_entry_t *entry)
+{
+  spooled_resource_t *spooled = tor_malloc_zero(sizeof(spooled_resource_t));
+  spooled->spool_source = DIR_SPOOL_CONSENSUS_CACHE_ENTRY;
+  spooled->spool_eagerly = 0;
+  consensus_cache_entry_incref(entry);
+  spooled->consensus_cache_entry = entry;
+
+  int r = consensus_cache_entry_get_body(entry,
+                                         &spooled->cce_body,
+                                         &spooled->cce_len);
+  if (r == 0) {
+    return spooled;
+  } else {
+    spooled_resource_free(spooled);
+    return NULL;
+  }
 }
 
 /** Release all storage held by <b>spooled</b>. */
@@ -3408,6 +3449,10 @@ spooled_resource_free(spooled_resource_t *spooled)
 
   if (spooled->cached_dir_ref) {
     cached_dir_decref(spooled->cached_dir_ref);
+  }
+
+  if (spooled->consensus_cache_entry) {
+    consensus_cache_entry_decref(spooled->consensus_cache_entry);
   }
 
   tor_free(spooled);
@@ -3456,6 +3501,9 @@ spooled_resource_estimate_size(const spooled_resource_t *spooled,
     return bodylen;
   } else {
     cached_dir_t *cached;
+    if (spooled->consensus_cache_entry) {
+      return spooled->cce_len;
+    }
     if (spooled->cached_dir_ref) {
       cached = spooled->cached_dir_ref;
     } else {
@@ -3465,7 +3513,7 @@ spooled_resource_estimate_size(const spooled_resource_t *spooled,
     if (cached == NULL) {
       return 0;
     }
-    size_t result = compressed ? cached->dir_z_len : cached->dir_len;
+    size_t result = compressed ? cached->dir_compressed_len : cached->dir_len;
     return result;
   }
 }
@@ -3497,15 +3545,16 @@ spooled_resource_flush_some(spooled_resource_t *spooled,
       /* Absent objects count as "done". */
       return SRFS_DONE;
     }
-    if (conn->zlib_state) {
-      connection_write_to_buf_zlib((const char*)body, bodylen, conn, 0);
+    if (conn->compress_state) {
+      connection_write_to_buf_compress((const char*)body, bodylen, conn, 0);
     } else {
       connection_write_to_buf((const char*)body, bodylen, TO_CONN(conn));
     }
     return SRFS_DONE;
   } else {
     cached_dir_t *cached = spooled->cached_dir_ref;
-    if (cached == NULL) {
+    consensus_cache_entry_t *cce = spooled->consensus_cache_entry;
+    if (cached == NULL && cce == NULL) {
       /* The cached_dir_t hasn't been materialized yet. So let's look it up. */
       cached = spooled->cached_dir_ref =
         spooled_resource_lookup_cached_dir(spooled, NULL);
@@ -3517,21 +3566,34 @@ spooled_resource_flush_some(spooled_resource_t *spooled,
       tor_assert_nonfatal(spooled->cached_dir_offset == 0);
     }
 
+    if (BUG(!cached && !cce))
+      return SRFS_DONE;
+
+    int64_t total_len;
+    const char *ptr;
+    if (cached) {
+      total_len = cached->dir_compressed_len;
+      ptr = cached->dir_compressed;
+    } else {
+      total_len = spooled->cce_len;
+      ptr = (const char *)spooled->cce_body;
+    }
     /* How many bytes left to flush? */
-    int64_t remaining = 0;
-    remaining = cached->dir_z_len - spooled->cached_dir_offset;
+    int64_t remaining;
+    remaining = total_len - spooled->cached_dir_offset;
     if (BUG(remaining < 0))
       return SRFS_ERR;
     ssize_t bytes = (ssize_t) MIN(DIRSERV_CACHED_DIR_CHUNK_SIZE, remaining);
-    if (conn->zlib_state) {
-      connection_write_to_buf_zlib(cached->dir_z + spooled->cached_dir_offset,
-                                   bytes, conn, 0);
+    if (conn->compress_state) {
+      connection_write_to_buf_compress(
+              ptr + spooled->cached_dir_offset,
+              bytes, conn, 0);
     } else {
-      connection_write_to_buf(cached->dir_z + spooled->cached_dir_offset,
+      connection_write_to_buf(ptr + spooled->cached_dir_offset,
                               bytes, TO_CONN(conn));
     }
     spooled->cached_dir_offset += bytes;
-    if (spooled->cached_dir_offset >= (off_t)cached->dir_z_len) {
+    if (spooled->cached_dir_offset >= (off_t)total_len) {
       return SRFS_DONE;
     } else {
       return SRFS_MORE;
@@ -3607,6 +3669,7 @@ spooled_resource_lookup_body(const spooled_resource_t *spooled,
       return 0;
     }
     case DIR_SPOOL_NETWORKSTATUS:
+    case DIR_SPOOL_CONSENSUS_CACHE_ENTRY:
     default:
       /* LCOV_EXCL_START */
       tor_assert_nonfatal_unreached();
@@ -3788,12 +3851,12 @@ connection_dirserv_flushed_some(dir_connection_t *conn)
   /* If we get here, we're done. */
   smartlist_free(conn->spool);
   conn->spool = NULL;
-  if (conn->zlib_state) {
-    /* Flush the zlib state: there could be more bytes pending in there, and
-     * we don't want to omit bytes. */
-    connection_write_to_buf_zlib("", 0, conn, 1);
-    tor_zlib_free(conn->zlib_state);
-    conn->zlib_state = NULL;
+  if (conn->compress_state) {
+    /* Flush the compression state: there could be more bytes pending in there,
+     * and we don't want to omit bytes. */
+    connection_write_to_buf_compress("", 0, conn, 1);
+    tor_compress_free(conn->compress_state);
+    conn->compress_state = NULL;
   }
   return 0;
 }

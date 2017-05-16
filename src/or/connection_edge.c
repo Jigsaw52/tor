@@ -1987,8 +1987,8 @@ destination_from_socket(entry_connection_t *conn, socks_request_t *req)
   socklen_t orig_dst_len = sizeof(orig_dst);
   tor_addr_t addr;
 
-#ifdef TRANS_TRPOXY
-  if (options->TransProxyType_parsed == TPT_TPROXY) {
+#ifdef TRANS_TPROXY
+  if (get_options()->TransProxyType_parsed == TPT_TPROXY) {
     if (getsockname(ENTRY_TO_CONN(conn)->s, (struct sockaddr*)&orig_dst,
                     &orig_dst_len) < 0) {
       int e = tor_socket_errno(ENTRY_TO_CONN(conn)->s);
@@ -2527,7 +2527,7 @@ connection_ap_handshake_send_begin(entry_connection_t *ap_conn)
     /* Sensitive directory connections must have an anonymous path length.
      * Otherwise, directory connections are typically one-hop.
      * This matches the earlier check for directory connection path anonymity
-     * in directory_initiate_command_rend(). */
+     * in directory_initiate_request(). */
     if (purpose_needs_anonymity(linked_dir_conn_base->purpose,
                     TO_DIR_CONN(linked_dir_conn_base)->router_purpose,
                     TO_DIR_CONN(linked_dir_conn_base)->requested_resource)) {
@@ -3133,15 +3133,13 @@ connection_exit_begin_conn(cell_t *cell, circuit_t *circ)
     port = bcell.port;
 
     if (or_circ && or_circ->p_chan) {
-      if (!options->AllowSingleHopExits &&
-           (or_circ->is_first_hop ||
-            (!connection_or_digest_is_known_relay(
+      if ((or_circ->is_first_hop ||
+           (!connection_or_digest_is_known_relay(
                 or_circ->p_chan->identity_digest) &&
           should_refuse_unknown_exits(options)))) {
-        /* Don't let clients use us as a single-hop proxy, unless the user
-         * has explicitly allowed that in the config. It attracts attackers
-         * and users who'd be better off with, well, single-hop proxies.
-         */
+        /* Don't let clients use us as a single-hop proxy. It attracts
+         * attackers and users who'd be better off with, well, single-hop
+         * proxies. */
         log_fn(LOG_PROTOCOL_WARN, LD_PROTOCOL,
                "Attempt by %s to open a stream %s. Closing.",
                safe_str(channel_get_canonical_remote_descr(or_circ->p_chan)),

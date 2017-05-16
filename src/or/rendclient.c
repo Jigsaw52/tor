@@ -724,6 +724,9 @@ directory_get_from_hs_dir(const char *desc_id,
     hs_dir = pick_hsdir(desc_id, desc_id_base32);
     if (!hs_dir) {
       /* No suitable hs dir can be found, stop right now. */
+      control_event_hs_descriptor_failed(rend_query, NULL, "QUERY_NO_HSDIR");
+      control_event_hs_descriptor_content(rend_data_get_address(rend_query),
+                                          desc_id_base32, NULL, NULL);
       return 0;
     }
   }
@@ -744,6 +747,9 @@ directory_get_from_hs_dir(const char *desc_id,
                       REND_DESC_COOKIE_LEN,
                       0)<0) {
       log_warn(LD_BUG, "Could not base64-encode descriptor cookie.");
+      control_event_hs_descriptor_failed(rend_query, hsdir_fp, "BAD_DESC");
+      control_event_hs_descriptor_content(rend_data_get_address(rend_query),
+                                          desc_id_base32, hsdir_fp, NULL);
       return 0;
     }
     /* Remove == signs. */
@@ -756,13 +762,15 @@ directory_get_from_hs_dir(const char *desc_id,
   /* Send fetch request. (Pass query and possibly descriptor cookie so that
    * they can be written to the directory connection and be referred to when
    * the response arrives. */
-  directory_initiate_command_routerstatus_rend(hs_dir,
-                                          DIR_PURPOSE_FETCH_RENDDESC_V2,
-                                          ROUTER_PURPOSE_GENERAL,
-                                          how_to_fetch,
-                                          desc_id_base32,
-                                          NULL, 0, 0,
-                                          rend_query, NULL);
+  directory_request_t *req =
+    directory_request_new(DIR_PURPOSE_FETCH_RENDDESC_V2);
+  directory_request_set_routerstatus(req, hs_dir);
+  directory_request_set_indirection(req, how_to_fetch);
+  directory_request_set_resource(req, desc_id_base32);
+  directory_request_set_rend_query(req, rend_query);
+  directory_initiate_request(req);
+  directory_request_free(req);
+
   log_info(LD_REND, "Sending fetch request for v2 descriptor for "
                     "service '%s' with descriptor ID '%s', auth type %d, "
                     "and descriptor cookie '%s' to hidden service "

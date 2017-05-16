@@ -189,6 +189,16 @@ AC_ARG_ENABLE(seccomp,
 AC_ARG_ENABLE(libscrypt,
      AS_HELP_STRING(--disable-libscrypt, [do not attempt to use libscrypt]))
 
+dnl Enable event tracing which are transformed to debug log statement.
+AC_ARG_ENABLE(event-tracing-debug,
+     AS_HELP_STRING(--enable-event-tracing-debug, [build with event tracing to debug log]))
+AM_CONDITIONAL([USE_EVENT_TRACING_DEBUG], [test "x$enable_event_tracing_debug" = "xyes"])
+
+if test x$enable_event_tracing_debug = xyes; then
+  AC_DEFINE([USE_EVENT_TRACING_DEBUG], [1], [Tracing framework to log debug])
+  AC_DEFINE([TOR_EVENT_TRACING_ENABLED], [1], [Compile the event tracing instrumentation])
+fi
+
 dnl check for the correct "ar" when cross-compiling.
 dnl   (AM_PROG_AR was new in automake 1.11.2, which we do not yet require,
 dnl    so kludge up a replacement for the case where it isn't there yet.)
@@ -731,6 +741,70 @@ else
      TOR_ZLIB_LIBS="-lz"
 fi
 AC_SUBST(TOR_ZLIB_LIBS)
+
+dnl ------------------------------------------------------
+dnl Where we do we find lzma?
+
+AC_ARG_ENABLE(lzma,
+      AS_HELP_STRING(--enable-lzma, [enable support for the LZMA compression scheme.]),
+      [case "${enableval}" in
+        "yes") lzma=true ;;
+        "no")  lzma=false ;;
+        * ) AC_MSG_ERROR(bad value for --enable-lzma) ;;
+      esac], [lzma=auto])
+
+if test "x$enable_lzma" = "xno"; then
+    have_lzma=no;
+else
+    PKG_CHECK_MODULES([LZMA],
+                      [liblzma],
+                      have_lzma=yes,
+                      have_lzma=no)
+
+    if test "x$have_lzma" = "xno" ; then
+        AC_MSG_WARN([Unable to find liblzma.])
+    fi
+fi
+
+if test "x$have_lzma" = "xyes"; then
+    AC_DEFINE(HAVE_LZMA,1,[Have LZMA])
+    TOR_LZMA_CFLAGS="${LZMA_CFLAGS}"
+    TOR_LZMA_LIBS="${LZMA_LIBS}"
+fi
+AC_SUBST(TOR_LZMA_CFLAGS)
+AC_SUBST(TOR_LZMA_LIBS)
+
+dnl ------------------------------------------------------
+dnl Where we do we find zstd?
+
+AC_ARG_ENABLE(zstd,
+      AS_HELP_STRING(--enable-zstd, [enable support for the Zstandard compression scheme.]),
+      [case "${enableval}" in
+        "yes") zstd=true ;;
+        "no")  zstd=false ;;
+        * ) AC_MSG_ERROR(bad value for --enable-zstd) ;;
+      esac], [zstd=auto])
+
+if test "x$enable_zstd" = "xno"; then
+    have_zstd=no;
+else
+    PKG_CHECK_MODULES([ZSTD],
+                      [libzstd],
+                      have_zstd=yes,
+                      have_zstd=no)
+
+    if test "x$have_zstd" = "xno" ; then
+        AC_MSG_WARN([Unable to find libzstd.])
+    fi
+fi
+
+if test "x$have_zstd" = "xyes"; then
+    AC_DEFINE(HAVE_ZSTD,1,[Have Zstd])
+    TOR_ZSTD_CFLAGS="${ZSTD_CFLAGS}"
+    TOR_ZSTD_LIBS="${ZSTD_LIBS}"
+fi
+AC_SUBST(TOR_ZSTD_CFLAGS)
+AC_SUBST(TOR_ZSTD_LIBS)
 
 dnl ----------------------------------------------------------------------
 dnl Check if libcap is available for capabilities.

@@ -44,13 +44,13 @@ double fabs(double x);
 #include "buffers.h"
 #include "circuitlist.h"
 #include "circuitstats.h"
+#include "compress.h"
 #include "config.h"
 #include "connection_edge.h"
 #include "geoip.h"
 #include "rendcommon.h"
 #include "rendcache.h"
 #include "test.h"
-#include "torgzip.h"
 #include "main.h"
 #include "memarea.h"
 #include "onion.h"
@@ -1186,6 +1186,7 @@ struct testgroup_t testgroups[] = {
   { "cellfmt/", cell_format_tests },
   { "cellqueue/", cell_queue_tests },
   { "channel/", channel_tests },
+  { "channelpadding/", channelpadding_tests },
   { "channeltls/", channeltls_tests },
   { "checkdir/", checkdir_tests },
   { "circuitbuild/", circuitbuild_tests },
@@ -1195,11 +1196,14 @@ struct testgroup_t testgroups[] = {
   { "compat/libevent/", compat_libevent_tests },
   { "config/", config_tests },
   { "connection/", connection_tests },
+  { "conscache/", conscache_tests },
   { "consdiff/", consdiff_tests },
+  { "consdiffmgr/", consdiffmgr_tests },
   { "container/", container_tests },
   { "control/", controller_tests },
   { "control/event/", controller_event_tests },
   { "crypto/", crypto_tests },
+  { "crypto/openssl/", crypto_openssl_tests },
   { "dir/", dir_tests },
   { "dir_handle_get/", dir_handle_get_tests },
   { "dir/md/", microdesc_tests },

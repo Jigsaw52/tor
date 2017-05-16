@@ -54,15 +54,18 @@
 #include "buffers.h"
 #include "channel.h"
 #include "channeltls.h"
+#include "channelpadding.h"
 #include "circuitbuild.h"
 #include "circuitlist.h"
 #include "circuituse.h"
 #include "command.h"
+#include "compress.h"
 #include "config.h"
 #include "confparse.h"
 #include "connection.h"
 #include "connection_edge.h"
 #include "connection_or.h"
+#include "consdiffmgr.h"
 #include "control.h"
 #include "cpuworker.h"
 #include "crypto_s2k.h"
@@ -104,7 +107,6 @@
 #include "ext_orport.h"
 #ifdef USE_DMALLOC
 #include <dmalloc.h>
-#include <openssl/crypto.h>
 #endif
 #include "memarea.h"
 #include "sandbox.h"
@@ -176,7 +178,7 @@ static int signewnym_is_pending = 0;
 static unsigned newnym_epoch = 0;
 
 /** Smartlist of all open connections. */
-static smartlist_t *connection_array = NULL;
+STATIC smartlist_t *connection_array = NULL;
 /** List of connections that have been marked for close and need to be freed
  * and removed from connection_array. */
 static smartlist_t *closeable_connection_lst = NULL;
@@ -1095,8 +1097,9 @@ run_connection_housekeeping(int i, time_t now)
   } else if (!have_any_circuits &&
              now - or_conn->idle_timeout >=
                                          chan->timestamp_last_had_circuits) {
-    log_info(LD_OR,"Expiring non-used OR connection to fd %d (%s:%d) "
-             "[no circuits for %d; timeout %d; %scanonical].",
+    log_info(LD_OR,"Expiring non-used OR connection "U64_FORMAT" to fd %d "
+             "(%s:%d) [no circuits for %d; timeout %d; %scanonical].",
+             U64_PRINTF_ARG(chan->global_identifier),
              (int)conn->s, conn->address, conn->port,
              (int)(now - chan->timestamp_last_had_circuits),
              or_conn->idle_timeout,
@@ -1119,6 +1122,8 @@ run_connection_housekeeping(int i, time_t now)
     memset(&cell,0,sizeof(cell_t));
     cell.command = CELL_PADDING;
     connection_or_write_cell_to_buf(&cell, or_conn);
+  } else {
+    channelpadding_decide_to_pad_channel(chan);
   }
 }
 
@@ -1185,6 +1190,9 @@ CALLBACK(check_dns_honesty);
 CALLBACK(write_bridge_ns);
 CALLBACK(check_fw_helper_app);
 CALLBACK(heartbeat);
+CALLBACK(clean_consdiffmgr);
+CALLBACK(reset_padding_counts);
+CALLBACK(check_canonical_channels);
 
 #undef CALLBACK
 
@@ -1217,6 +1225,9 @@ static periodic_event_item_t periodic_events[] = {
   CALLBACK(write_bridge_ns),
   CALLBACK(check_fw_helper_app),
   CALLBACK(heartbeat),
+  CALLBACK(clean_consdiffmgr),
+  CALLBACK(reset_padding_counts),
+  CALLBACK(check_canonical_channels),
   END_OF_PERIODIC_EVENTS
 };
 #undef CALLBACK
@@ -1472,6 +1483,12 @@ run_scheduled_events(time_t now)
   /* 11b. check pending unconfigured managed proxies */
   if (!net_is_disabled() && pt_proxies_configuration_pending())
     pt_configure_remaining_proxies();
+
+  /* 12. launch diff computations.  (This is free if there are none to
+   * launch.) */
+  if (server_mode(options)) {
+    consdiffmgr_rescan();
+  }
 }
 
 /* Periodic callback: rotate the onion keys after the period defined by the
@@ -1745,6 +1762,28 @@ write_stats_file_callback(time_t now, const or_options_t *options)
   }
 
   return safe_timer_diff(now, next_time_to_write_stats_files);
+}
+
+#define CHANNEL_CHECK_INTERVAL (60*60)
+static int
+check_canonical_channels_callback(time_t now, const or_options_t *options)
+{
+  (void)now;
+  if (public_server_mode(options))
+    channel_check_for_duplicates();
+
+  return CHANNEL_CHECK_INTERVAL;
+}
+
+static int
+reset_padding_counts_callback(time_t now, const or_options_t *options)
+{
+  if (options->PaddingStatistics) {
+    rep_hist_prep_published_padding_counts(now);
+  }
+
+  rep_hist_reset_padding_counts();
+  return REPHIST_CELL_PADDING_COUNTS_INTERVAL;
 }
 
 /**
@@ -2033,6 +2072,17 @@ heartbeat_callback(time_t now, const or_options_t *options)
   }
 
   return options->HeartbeatPeriod;
+}
+
+#define CDM_CLEAN_CALLBACK_INTERVAL 600
+static int
+clean_consdiffmgr_callback(time_t now, const or_options_t *options)
+{
+  (void)now;
+  if (server_mode(options)) {
+    consdiffmgr_cleanup();
+  }
+  return CDM_CLEAN_CALLBACK_INTERVAL;
 }
 
 /** Timer: used to invoke second_elapsed_callback() once per second. */
@@ -2363,6 +2413,8 @@ do_main_loop(void)
   }
 
   handle_signals(1);
+  monotime_init();
+  timers_initialize();
 
   /* load the private keys, if we're supposed to have them, and set up the
    * TLS context. */
@@ -2430,6 +2482,7 @@ do_main_loop(void)
     /* launch cpuworkers. Need to do this *after* we've read the onion key. */
     cpu_init();
   }
+  consdiffmgr_enable_background_compression();
 
   /* Setup shared random protocol subsystem. */
   if (authdir_mode_v3(get_options())) {
@@ -2953,6 +3006,7 @@ tor_init(int argc, char *argv[])
   rep_hist_init();
   /* Initialize the service cache. */
   rend_cache_init();
+  hs_cache_init();
   addressmap_init(); /* Init the client dns cache. Do it always, since it's
                       * cheap. */
 
@@ -2999,11 +3053,16 @@ tor_init(int argc, char *argv[])
     const char *version = get_version();
 
     log_notice(LD_GENERAL, "Tor %s running on %s with Libevent %s, "
-               "OpenSSL %s and Zlib %s.", version,
+               "OpenSSL %s, Zlib %s, Liblzma %s, and Libzstd %s.", version,
                get_uname(),
                tor_libevent_get_version_str(),
                crypto_openssl_get_version_str(),
-               tor_zlib_get_version_str());
+               tor_compress_supports_method(ZLIB_METHOD) ?
+                 tor_compress_version_str(ZLIB_METHOD) : "N/A",
+               tor_compress_supports_method(LZMA_METHOD) ?
+                 tor_compress_version_str(LZMA_METHOD) : "N/A",
+               tor_compress_supports_method(ZSTD_METHOD) ?
+                 tor_compress_version_str(ZSTD_METHOD) : "N/A");
 
     log_notice(LD_GENERAL, "Tor can't help you if you use it wrong! "
                "Learn how to be safe at "
@@ -3027,6 +3086,13 @@ tor_init(int argc, char *argv[])
 
   /* The options are now initialised */
   const or_options_t *options = get_options();
+
+  /* Initialize channelpadding parameters to defaults until we get
+   * a consensus */
+  channelpadding_new_consensus_params(NULL);
+
+  /* Initialize predicted ports list after loading options */
+  predicted_ports_init();
 
 #ifndef _WIN32
   if (geteuid()==0)
@@ -3157,6 +3223,7 @@ tor_free_all(int postfork)
   sandbox_free_getaddrinfo_cache();
   protover_free_all();
   bridges_free_all();
+  consdiffmgr_free_all();
   if (!postfork) {
     config_free_all();
     or_state_free_all();
@@ -3224,6 +3291,9 @@ tor_cleanup(void)
       rep_hist_record_mtbf_data(now, 0);
     keypin_close_journal();
   }
+
+  timers_shutdown();
+
 #ifdef USE_DMALLOC
   dmalloc_log_stats();
 #endif
@@ -3579,6 +3649,8 @@ sandbox_init_filter(void)
     OPEN_DATADIR("stats");
     STAT_DATADIR("stats");
     STAT_DATADIR2("stats", "dirreq-stats");
+
+    consdiffmgr_register_with_sandbox(&cfg);
   }
 
   init_addrinfo();
@@ -3595,6 +3667,8 @@ tor_main(int argc, char *argv[])
   int result = 0;
 
 #ifdef _WIN32
+  /* On heap corruption, just give up; don't try to play along. */
+  HeapSetInformation(NULL, HeapEnableTerminationOnCorruption, NULL, 0);
   /* Call SetProcessDEPPolicy to permanently enable DEP.
      The function will not resolve on earlier versions of Windows,
      and failure is not dangerous. */
@@ -3603,7 +3677,10 @@ tor_main(int argc, char *argv[])
     typedef BOOL (WINAPI *PSETDEP)(DWORD);
     PSETDEP setdeppolicy = (PSETDEP)GetProcAddress(hMod,
                            "SetProcessDEPPolicy");
-    if (setdeppolicy) setdeppolicy(1); /* PROCESS_DEP_ENABLE */
+    if (setdeppolicy) {
+      /* PROCESS_DEP_ENABLE | PROCESS_DEP_DISABLE_ATL_THUNK_EMULATION */
+      setdeppolicy(3);
+    }
   }
 #endif
 
@@ -3611,14 +3688,15 @@ tor_main(int argc, char *argv[])
 
   update_approx_time(time(NULL));
   tor_threads_init();
+  tor_compress_init();
   init_logging(0);
   monotime_init();
 #ifdef USE_DMALLOC
   {
     /* Instruct OpenSSL to use our internal wrappers for malloc,
        realloc and free. */
-    int r = CRYPTO_set_mem_ex_functions(tor_malloc_, tor_realloc_, tor_free_);
-    tor_assert(r);
+    int r = crypto_use_tor_alloc_functions();
+    tor_assert(r == 0);
   }
 #endif
 #ifdef NT_SERVICE
