@@ -2162,7 +2162,8 @@ config_parse_commandline(int argc, char **argv, int ignore_errors,
   config_line_t *front_cmdline = NULL;
   config_line_t **new_cmdline = &front_cmdline;
 
-  char *s, *arg;
+  char *s;
+  const char *arg;
   int i = 1;
 
   while (i < argc) {
@@ -2201,7 +2202,7 @@ config_parse_commandline(int argc, char **argv, int ignore_errors,
 
     if (want_arg == ARGUMENT_NECESSARY && is_last) {
       if (ignore_errors) {
-        arg = tor_strdup("");
+        arg = "";
       } else {
         log_warn(LD_CONFIG,"Command-line option '%s' with no value. Failing.",
             argv[i]);
@@ -2210,18 +2211,15 @@ config_parse_commandline(int argc, char **argv, int ignore_errors,
         return -1;
       }
     } else if (want_arg == ARGUMENT_OPTIONAL && is_last) {
-      arg = tor_strdup("");
+      arg = "";
     } else {
-      arg = (want_arg != TAKES_NO_ARGUMENT) ? tor_strdup(argv[i+1]) :
-                                              tor_strdup("");
+      arg = (want_arg != TAKES_NO_ARGUMENT) ? argv[i+1] : "";
     }
 
-    param = tor_malloc_zero(sizeof(config_line_t));
-    param->key = is_cmdline ? tor_strdup(argv[i]) :
-                   tor_strdup(config_expand_abbrev(&options_format, s, 1, 1));
-    param->value = arg;
+    const char *key = is_cmdline ? argv[i] :
+      config_expand_abbrev(&options_format, s, 1, 1);
+    param = config_line_new(key, arg, NULL);
     param->command = command;
-    param->next = NULL;
     log_debug(LD_CONFIG, "command line: parsed keyword '%s', value '%s'",
         param->key, param->value);
 
@@ -3232,8 +3230,7 @@ options_validate(or_options_t *old_options, or_options_t *options,
        * ReachableAddresses, which will set ReachableORAddresses and
        * ReachableDirAddresses if they aren't set explicitly. */
       smartlist_t *instead = smartlist_new();
-      config_line_t *new_line = tor_malloc_zero(sizeof(config_line_t));
-      new_line->key = tor_strdup("ReachableAddresses");
+
       /* If we're configured with the old format, we need to prepend some
        * open ports. */
       SMARTLIST_FOREACH(options->FirewallPorts, const char *, portno,
@@ -3242,6 +3239,8 @@ options_validate(or_options_t *old_options, or_options_t *options,
         if (p<0) continue;
         smartlist_add_asprintf(instead, "*:%d", p);
       });
+      config_line_t *new_line = config_line_new("ReachableAddresses", NULL,
+                                                NULL);
       new_line->value = smartlist_join_strings(instead,",",0,NULL);
       /* These have been deprecated since 0.1.1.5-alpha-cvs */
       log_notice(LD_CONFIG,
@@ -3255,17 +3254,15 @@ options_validate(or_options_t *old_options, or_options_t *options,
       /* We do not have FirewallPorts set, so add 80 to
        * ReachableDirAddresses, and 443 to ReachableORAddresses. */
       if (!options->ReachableDirAddresses) {
-        config_line_t *new_line = tor_malloc_zero(sizeof(config_line_t));
-        new_line->key = tor_strdup("ReachableDirAddresses");
-        new_line->value = tor_strdup("*:80");
+        config_line_t *new_line = config_line_new("ReachableDirAddresses",
+                                                  "*:80", NULL);
         options->ReachableDirAddresses = new_line;
         log_notice(LD_CONFIG, "Converting FascistFirewall config option "
             "to new format: \"ReachableDirAddresses *:80\"");
       }
       if (!options->ReachableORAddresses) {
-        config_line_t *new_line = tor_malloc_zero(sizeof(config_line_t));
-        new_line->key = tor_strdup("ReachableORAddresses");
-        new_line->value = tor_strdup("*:443");
+        config_line_t *new_line = config_line_new("ReachableORAddresses",
+                                                  "*:443", NULL);
         options->ReachableORAddresses = new_line;
         log_notice(LD_CONFIG, "Converting FascistFirewall config option "
             "to new format: \"ReachableORAddresses *:443\"");
@@ -3286,12 +3283,11 @@ options_validate(or_options_t *old_options, or_options_t *options,
     for (;;) {
       linep = &((*linep)->next);
       if (!*linep) {
-        *linep = tor_malloc_zero(sizeof(config_line_t));
-        (*linep)->key = tor_strdup(
+        const char *key =
           (i==0) ?  "ReachableAddresses" :
             (i==1) ? "ReachableORAddresses" :
-                     "ReachableDirAddresses");
-        (*linep)->value = tor_strdup("reject *:*");
+                     "ReachableDirAddresses";
+        *linep = config_line_new(key, "reject *:*", NULL);
         break;
       }
     }

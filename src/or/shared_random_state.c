@@ -632,23 +632,20 @@ disk_state_update(void)
   /* Shared random values. */
   next = &sr_disk_state->SharedRandValues;
   if (sr_state->previous_srv != NULL) {
-    *next = line = tor_malloc_zero(sizeof(config_line_t));
-    line->key = tor_strdup(dstate_prev_srv_key);
+    *next = line = config_line_new(dstate_prev_srv_key, NULL, NULL);
     disk_state_put_srv_line(sr_state->previous_srv, line);
     /* Go to the next shared random value. */
     next = &(line->next);
   }
   if (sr_state->current_srv != NULL) {
-    *next = line = tor_malloc_zero(sizeof(*line));
-    line->key = tor_strdup(dstate_cur_srv_key);
+    *next = line = config_line_new(dstate_cur_srv_key, NULL, NULL);
     disk_state_put_srv_line(sr_state->current_srv, line);
   }
 
   /* Parse the commits and construct config line(s). */
   next = &sr_disk_state->Commit;
   DIGESTMAP_FOREACH(sr_state->commits, key, sr_commit_t *, commit) {
-    *next = line = tor_malloc_zero(sizeof(*line));
-    line->key = tor_strdup(dstate_commit_key);
+    *next = line = config_line_new(dstate_commit_key, NULL, NULL);
     disk_state_put_commit_line(commit, line);
     next = &(line->next);
   } DIGESTMAP_FOREACH_END;

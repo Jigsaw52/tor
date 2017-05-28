@@ -803,8 +803,7 @@ circuit_build_times_update_state(const circuit_build_times_t *cbt,
   for (i = 0; i < nbins; i++) {
     // compress the histogram by skipping the blanks
     if (histogram[i] == 0) continue;
-    *next = line = tor_malloc_zero(sizeof(config_line_t));
-    line->key = tor_strdup("CircuitBuildTimeBin");
+    *next = line = config_line_new("CircuitBuildTimeBin", NULL, NULL);
     tor_asprintf(&line->value, "%d %d",
             CBT_BIN_TO_MS(i), histogram[i]);
     next = &(line->next);

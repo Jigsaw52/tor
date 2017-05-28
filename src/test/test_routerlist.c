@@ -348,9 +348,8 @@ test_router_pick_directory_server_impl(void *arg)
 
   /* Set a Fascist firewall */
   flags &= ~ PDS_IGNORE_FASCISTFIREWALL;
-  policy_line = tor_malloc_zero(sizeof(config_line_t));
-  policy_line->key = tor_strdup("ReachableORAddresses");
-  policy_line->value = tor_strdup("accept *:442, reject *:*");
+  policy_line = config_line_new("ReachableORAddresses",
+                                "accept *:442, reject *:*", NULL);
   options->ReachableORAddresses = policy_line;
   policies_parse_from_options(options);
 
@@ -378,9 +377,8 @@ test_router_pick_directory_server_impl(void *arg)
   node_router3->rs->last_dir_503_at = 0;
 
   /* Fascists against OR and Dir */
-  policy_line = tor_malloc_zero(sizeof(config_line_t));
-  policy_line->key = tor_strdup("ReachableAddresses");
-  policy_line->value = tor_strdup("accept *:80, reject *:*");
+  policy_line = config_line_new("ReachableAddresses",
+                                "accept *:80, reject *:*", NULL);
   options->ReachableDirAddresses = policy_line;
   policies_parse_from_options(options);
   node_router1->rs->or_port = 442;

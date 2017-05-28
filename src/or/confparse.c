@@ -540,8 +540,7 @@ config_get_assigned_option(const config_format_t *fmt, const void *options,
   }
   value = STRUCT_VAR_P(options, var->var_offset);
 
-  result = tor_malloc_zero(sizeof(config_line_t));
-  result->key = tor_strdup(var->name);
+  result = config_line_new(var->name, NULL, NULL);
   switch (var->type)
     {
     case CONFIG_TYPE_STRING:
@@ -850,9 +849,7 @@ config_reset(const config_format_t *fmt, void *options,
   if (!use_defaults)
     return; /* all done */
   if (var->initvalue) {
-    c = tor_malloc_zero(sizeof(config_line_t));
-    c->key = tor_strdup(var->name);
-    c->value = tor_strdup(var->initvalue);
+    c = config_line_new(var->name, var->initvalue, NULL);
     if (config_assign_value(fmt, options, c, &msg) < 0) {
       log_warn(LD_BUG, "Failed to assign default: %s", msg);
       tor_free(msg); /* if this happens it's a bug */

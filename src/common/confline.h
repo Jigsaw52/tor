@@ -21,6 +21,7 @@
 typedef struct config_line_t {
   char *key;
   char *value;
+  char *raw_value;
   struct config_line_t *next;
 
   /** What special treatment (if any) does this line require? */
@@ -31,6 +32,8 @@ typedef struct config_line_t {
   unsigned int fragile:1;
 } config_line_t;
 
+config_line_t *config_line_new(const char *key, const char *val,
+                               const char *raw_val);
 void config_line_append(config_line_t **lst,
                         const char *key, const char *val);
 void config_line_prepend(config_line_t **lst,

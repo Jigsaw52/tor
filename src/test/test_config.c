@@ -854,19 +854,19 @@ static void
 test_config_fix_my_family(void *arg)
 {
   char *err = NULL;
-  config_line_t *family = tor_malloc_zero(sizeof(config_line_t));
-  family->key = tor_strdup("MyFamily");
-  family->value = tor_strdup("$1111111111111111111111111111111111111111, "
-                             "1111111111111111111111111111111111111112, "
-                             "$1111111111111111111111111111111111111113");
+  config_line_t *family =
+    config_line_new("MyFamily",
+                    "$1111111111111111111111111111111111111111, "
+                    "1111111111111111111111111111111111111112, "
+                    "$1111111111111111111111111111111111111113", NULL);
 
-  config_line_t *family2 = tor_malloc_zero(sizeof(config_line_t));
-  family2->key = tor_strdup("MyFamily");
-  family2->value = tor_strdup("1111111111111111111111111111111111111114");
+  config_line_t *family2 =
+    config_line_new("MyFamily",
+                    "1111111111111111111111111111111111111114", NULL);
 
-  config_line_t *family3 = tor_malloc_zero(sizeof(config_line_t));
-  family3->key = tor_strdup("MyFamily");
-  family3->value = tor_strdup("$1111111111111111111111111111111111111115");
+  config_line_t *family3 =
+    config_line_new("MyFamily",
+                    "$1111111111111111111111111111111111111115", NULL);
 
   family->next = family2;
   family2->next = family3;
@@ -1465,7 +1465,7 @@ test_config_resolve_my_address(void *arg)
 
   tor_free(options->Address);
   options->Address = NULL;
-  options->DirAuthorities = tor_malloc_zero(sizeof(config_line_t));
+  options->DirAuthorities = config_line_new(NULL, NULL, NULL);
 
   MOCK(tor_gethostname,tor_gethostname_localhost);
 
@@ -1695,6 +1695,8 @@ test_config_adding_dir_servers(void *arg)
 {
   (void)arg;
 
+  const char *value;
+
   /* allocate options */
   or_options_t *options = tor_malloc_zero(sizeof(or_options_t));
 
@@ -1705,38 +1707,31 @@ test_config_adding_dir_servers(void *arg)
    * Zeroing the structure has the same effect as initialising to:
    * { NULL, NULL, NULL, CONFIG_LINE_NORMAL, 0};
    */
-  config_line_t *test_dir_authority = tor_malloc_zero(sizeof(config_line_t));
-  test_dir_authority->key = tor_strdup("DirAuthority");
-  test_dir_authority->value = tor_strdup(
+  value =
     "D0 orport=9000 "
     "v3ident=0023456789012345678901234567890123456789 "
-    "127.0.0.1:60090 0123 4567 8901 2345 6789 0123 4567 8901 2345 6789"
-    );
+    "127.0.0.1:60090 0123 4567 8901 2345 6789 0123 4567 8901 2345 6789";
+  config_line_t *test_dir_authority = config_line_new("DirAuthority", value,
+                                                      NULL);
 
-  config_line_t *test_alt_bridge_authority = tor_malloc_zero(
-                                                      sizeof(config_line_t));
-  test_alt_bridge_authority->key = tor_strdup("AlternateBridgeAuthority");
-  test_alt_bridge_authority->value = tor_strdup(
+  value =
     "B1 orport=9001 bridge "
-    "127.0.0.1:60091 1123 4567 8901 2345 6789 0123 4567 8901 2345 6789"
-    );
+    "127.0.0.1:60091 1123 4567 8901 2345 6789 0123 4567 8901 2345 6789";
+  config_line_t *test_alt_bridge_authority =
+    config_line_new("AlternateBridgeAuthority", value, NULL);
 
-  config_line_t *test_alt_dir_authority = tor_malloc_zero(
-                                                      sizeof(config_line_t));
-  test_alt_dir_authority->key = tor_strdup("AlternateDirAuthority");
-  test_alt_dir_authority->value = tor_strdup(
+  value =
     "A2 orport=9002 "
     "v3ident=0223456789012345678901234567890123456789 "
-    "127.0.0.1:60092 2123 4567 8901 2345 6789 0123 4567 8901 2345 6789"
-    );
+    "127.0.0.1:60092 2123 4567 8901 2345 6789 0123 4567 8901 2345 6789";
+  config_line_t *test_alt_dir_authority =
+    config_line_new("AlternateDirAuthority", value, NULL);
 
+  value =
+    "127.0.0.1:60093 orport=9003 id=0323456789012345678901234567890123456789";
   /* Use the format specified in the manual page */
-  config_line_t *test_fallback_directory = tor_malloc_zero(
-                                                      sizeof(config_line_t));
-  test_fallback_directory->key = tor_strdup("FallbackDir");
-  test_fallback_directory->value = tor_strdup(
-    "127.0.0.1:60093 orport=9003 id=0323456789012345678901234567890123456789"
-    );
+  config_line_t *test_fallback_directory =
+    config_line_new("FallbackDir", value, NULL);
 
   /* We need to know if add_default_fallback_dir_servers is called,
    * whatever the size of the list in fallback_dirs.inc,
@@ -3875,11 +3870,7 @@ test_config_port_cfg_line_extract_addrport(void *arg)
 static config_line_t *
 mock_config_line(const char *key, const char *val)
 {
-  config_line_t *config_line = tor_malloc(sizeof(config_line_t));
-  memset(config_line, 0, sizeof(config_line_t));
-  config_line->key = tor_strdup(key);
-  config_line->value = tor_strdup(val);
-  return config_line;
+  return config_line_new(key, val, NULL);
 }
 
 static void

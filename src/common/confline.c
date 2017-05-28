@@ -22,6 +22,20 @@ static int config_process_include(const char *path, int recursion_level,
                                   int extended, config_line_t ***next,
                                   config_line_t **list_last);
 
+/** Helper: allocate a new configuration option mapping 'key' to 'val' */
+config_line_t *
+config_line_new(const char *key, const char *val, const char *raw_val)
+{
+  config_line_t *newline;
+
+  newline = tor_malloc_zero(sizeof(*newline));
+  newline->key = key ? tor_strdup(key) : NULL;
+  newline->value = val ? tor_strdup(val) : NULL;
+  newline->raw_value = raw_val ? tor_strdup(raw_val) : NULL;
+  newline->next = NULL;
+  return newline;
+}
+
 /** Helper: allocate a new configuration option mapping 'key' to 'val',
  * append it to *<b>lst</b>. */
 void
@@ -31,16 +45,12 @@ config_line_append(config_line_t **lst,
 {
   tor_assert(lst);
 
-  config_line_t *newline;
+  config_line_t *newline = config_line_new(key, val, NULL);
 
-  newline = tor_malloc_zero(sizeof(config_line_t));
-  newline->key = tor_strdup(key);
-  newline->value = tor_strdup(val);
-  newline->next = NULL;
   while (*lst)
     lst = &((*lst)->next);
 
-  (*lst) = newline;
+  *lst = newline;
 }
 
 /** Helper: allocate a new configuration option mapping 'key' to 'val',
@@ -52,11 +62,8 @@ config_line_prepend(config_line_t **lst,
 {
   tor_assert(lst);
 
-  config_line_t *newline;
+  config_line_t *newline = config_line_new(key, val, NULL);
 
-  newline = tor_malloc_zero(sizeof(config_line_t));
-  newline->key = tor_strdup(key);
-  newline->value = tor_strdup(val);
   newline->next = *lst;
   *lst = newline;
 }
@@ -148,6 +155,7 @@ config_get_lines_aux(const char *string, config_line_t **result, int extended,
         *next = tor_malloc_zero(sizeof(**next));
         (*next)->key = k;
         (*next)->value = v;
+        (*next)->raw_value = NULL;
         (*next)->next = NULL;
         (*next)->command = command;
         list_last = *next;
@@ -321,6 +329,7 @@ config_free_lines(config_line_t *front)
 
     tor_free(tmp->key);
     tor_free(tmp->value);
+    tor_free(tmp->raw_value);
     tor_free(tmp);
   }
 }
@@ -345,9 +354,7 @@ config_lines_dup_and_filter(const config_line_t *inp,
       inp = inp->next;
       continue;
     }
-    *next_out = tor_malloc_zero(sizeof(config_line_t));
-    (*next_out)->key = tor_strdup(inp->key);
-    (*next_out)->value = tor_strdup(inp->value);
+    *next_out = config_line_new(inp->key, inp->value, inp->raw_value);
     inp = inp->next;
     next_out = &((*next_out)->next);
   }

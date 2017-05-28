@@ -161,17 +161,14 @@ test_pt_get_transport_options(void *arg)
 
   tt_assert(options);
 
-  cl = tor_malloc_zero(sizeof(config_line_t));
-  cl->value = tor_strdup("gruyere melty=10 hardness=se;ven");
+  cl = config_line_new(NULL, "gruyere melty=10 hardness=se;ven", NULL);
   options->ServerTransportOptions = cl;
 
-  cl = tor_malloc_zero(sizeof(config_line_t));
-  cl->value = tor_strdup("stnectaire melty=4 hardness=three");
+  cl = config_line_new(NULL, "stnectaire melty=4 hardness=three", NULL);
   cl->next = options->ServerTransportOptions;
   options->ServerTransportOptions = cl;
 
-  cl = tor_malloc_zero(sizeof(config_line_t));
-  cl->value = tor_strdup("pepperjack melty=12 hardness=five");
+  cl = config_line_new(NULL, "pepperjack melty=12 hardness=five", NULL);
   cl->next = options->ServerTransportOptions;
   options->ServerTransportOptions = cl;
 
