@@ -523,6 +523,7 @@ send_resolved_cell,(edge_connection_t *conn, uint8_t answer_type,
         answer_type = RESOLVED_TYPE_ERROR;
         /* fall through. */
       }
+      /* Falls through. */
     case RESOLVED_TYPE_ERROR_TRANSIENT:
     case RESOLVED_TYPE_ERROR:
       {
@@ -2086,8 +2087,8 @@ assert_cache_ok_(void)
 
 #endif
 
-cached_resolve_t
-*dns_get_cache_entry(cached_resolve_t *query)
+cached_resolve_t *
+dns_get_cache_entry(cached_resolve_t *query)
 {
   return HT_FIND(cache_map, &cache_root, query);
 }

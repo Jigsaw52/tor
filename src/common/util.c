@@ -1953,7 +1953,7 @@ parse_http_time(const char *date, struct tm *tm)
 
 /** Given an <b>interval</b> in seconds, try to write it to the
  * <b>out_len</b>-byte buffer in <b>out</b> in a human-readable form.
- * Return 0 on success, -1 on failure.
+ * Returns a non-negative integer on success, -1 on failure.
  */
 int
 format_time_interval(char *out, size_t out_len, long interval)
@@ -3043,6 +3043,41 @@ unescape_string(const char *s, char **result, size_t *size_out)
         *out++ = *cp++;
       }
   }
+}
+
+/** Removes enclosing quotes from <b>path</b> and unescapes quotes between the
+ * enclosing quotes. Backslashes are not unescaped. Return the unquoted
+ * <b>path</b> on sucess or 0 if <b>path</b> is not quoted correctly. */
+char *
+get_unquoted_path(const char *path)
+{
+  size_t len = strlen(path);
+
+  if (len == 0) {
+    return tor_strdup("");
+  }
+
+  int has_start_quote = (path[0] == '\"');
+  int has_end_quote = (len > 0 && path[len-1] == '\"');
+  if (has_start_quote != has_end_quote || (len == 1 && has_start_quote)) {
+    return NULL;
+  }
+
+  char *unquoted_path = tor_malloc(len - has_start_quote - has_end_quote + 1);
+  char *s = unquoted_path;
+  size_t i;
+  for (i = has_start_quote; i < len - has_end_quote; i++) {
+    if (path[i] == '\"' && (i > 0 && path[i-1] == '\\')) {
+      *(s-1) = path[i];
+    } else if (path[i] != '\"') {
+      *s++ = path[i];
+    } else {  /* unescaped quote */
+      tor_free(unquoted_path);
+      return NULL;
+    }
+  }
+  *s = '\0';
+  return unquoted_path;
 }
 
 /** Expand any homedir prefix on <b>filename</b>; return a newly allocated

@@ -67,7 +67,7 @@
  *
  * While we're building circuits, we track a little "guard state" for
  * each circuit. We use this to keep track of whether the circuit is
- * one that we can use as soon as its done, or whether it's one that
+ * one that we can use as soon as it's done, or whether it's one that
  * we should keep around to see if we can do better.  In the latter case,
  * a periodic call to entry_guards_upgrade_waiting_circuits() will
  * eventually upgrade it.
@@ -2073,6 +2073,23 @@ circuit_guard_state_free(circuit_guard_state_t *state)
   tor_free(state);
 }
 
+/** Allocate and return a new circuit_guard_state_t to track the result
+ * of using <b>guard</b> for a given operation. */
+static circuit_guard_state_t *
+circuit_guard_state_new(entry_guard_t *guard, unsigned state,
+                        entry_guard_restriction_t *rst)
+{
+  circuit_guard_state_t *result;
+
+  result = tor_malloc_zero(sizeof(circuit_guard_state_t));
+  result->guard = entry_guard_handle_new(guard);
+  result->state = state;
+  result->state_set_at = approx_time();
+  result->restrictions = rst;
+
+  return result;
+}
+
 /**
  * Pick a suitable entry guard for a circuit in, and place that guard
  * in *<b>chosen_node_out</b>. Set *<b>guard_state_out</b> to an opaque
@@ -2111,11 +2128,7 @@ entry_guard_pick_for_circuit(guard_selection_t *gs,
     goto fail;
 
   *chosen_node_out = node;
-  *guard_state_out = tor_malloc_zero(sizeof(circuit_guard_state_t));
-  (*guard_state_out)->guard = entry_guard_handle_new(guard);
-  (*guard_state_out)->state = state;
-  (*guard_state_out)->state_set_at = approx_time();
-  (*guard_state_out)->restrictions = rst;
+  *guard_state_out = circuit_guard_state_new(guard, state, rst);
 
   return 0;
  fail:
@@ -2924,6 +2937,32 @@ entry_guard_get_by_id_digest(const char *digest)
 {
   return entry_guard_get_by_id_digest_for_guard_selection(
       get_guard_selection_info(), digest);
+}
+
+/** We are about to connect to bridge with identity <b>digest</b> to fetch its
+ *  descriptor. Create a new guard state for this connection and return it. */
+circuit_guard_state_t *
+get_guard_state_for_bridge_desc_fetch(const char *digest)
+{
+  circuit_guard_state_t *guard_state = NULL;
+  entry_guard_t *guard = NULL;
+
+  guard = entry_guard_get_by_id_digest_for_guard_selection(
+                                    get_guard_selection_info(), digest);
+  if (!guard) {
+    return NULL;
+  }
+
+  /* Update the guard last_tried_to_connect time since it's checked by the
+   * guard susbsystem. */
+  guard->last_tried_to_connect = approx_time();
+
+  /* Create the guard state */
+  guard_state = circuit_guard_state_new(guard,
+                                        GUARD_CIRC_STATE_USABLE_ON_COMPLETION,
+                                        NULL);
+
+  return guard_state;
 }
 
 /** Release all storage held by <b>e</b>. */

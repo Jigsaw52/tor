@@ -59,6 +59,7 @@
 #include "circuitlist.h"
 #include "circuituse.h"
 #include "command.h"
+#include "compat_rust.h"
 #include "compress.h"
 #include "config.h"
 #include "confparse.h"
@@ -3073,6 +3074,15 @@ tor_init(int argc, char *argv[])
                  "Expect more bugs than usual.");
   }
 
+  {
+    rust_str_t rust_str = rust_welcome_string();
+    const char *s = rust_str_get(rust_str);
+    if (strlen(s) > 0) {
+      log_notice(LD_GENERAL, "%s", s);
+    }
+    rust_str_free(rust_str);
+  }
+
   if (network_init()<0) {
     log_err(LD_BUG,"Error initializing network; exiting.");
     return -1;
@@ -3667,6 +3677,9 @@ tor_main(int argc, char *argv[])
   int result = 0;
 
 #ifdef _WIN32
+#ifndef HeapEnableTerminationOnCorruption
+#define HeapEnableTerminationOnCorruption 1
+#endif
   /* On heap corruption, just give up; don't try to play along. */
   HeapSetInformation(NULL, HeapEnableTerminationOnCorruption, NULL, 0);
   /* Call SetProcessDEPPolicy to permanently enable DEP.

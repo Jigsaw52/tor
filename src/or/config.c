@@ -558,11 +558,13 @@ static config_var_t option_vars_[] = {
                                  "10800, 21600, 43200"),
   /* With the ClientBootstrapConsensus*Download* below:
    * Clients with only authorities will try:
-   *  - 3 authorities over 10 seconds, then wait 60 minutes.
+   *  - at least 3 authorities over 10 seconds, then exponentially backoff,
+   *    with the next attempt 3-21 seconds later,
    * Clients with authorities and fallbacks will try:
-   *  - 2 authorities and 4 fallbacks over 21 seconds, then wait 60 minutes.
+   *  - at least 2 authorities and 4 fallbacks over 21 seconds, then
+   *    exponentially backoff, with the next attempts 4-33 seconds later,
    * Clients will also retry when an application request arrives.
-   * After a number of failed reqests, clients retry every 3 days + 1 hour.
+   * After a number of failed requests, clients retry every 3 days + 1 hour.
    *
    * Clients used to try 2 authorities over 10 seconds, then wait for
    * 60 minutes or an application request.
@@ -2775,7 +2777,7 @@ compute_publishserverdescriptor(or_options_t *options)
 #define MIN_REND_POST_PERIOD (10*60)
 #define MIN_REND_POST_PERIOD_TESTING (5)
 
-/** Higest allowable value for CircuitsAvailableTimeout.
+/** Highest allowable value for CircuitsAvailableTimeout.
  * If this is too large, client connections will stay open for too long,
  * incurring extra padding overhead. */
 #define MAX_CIRCS_AVAILABLE_TIME (24*60*60)
@@ -3490,7 +3492,7 @@ options_validate(or_options_t *old_options, or_options_t *options,
     int severity = LOG_NOTICE;
     /* Be a little quieter if we've deliberately disabled
      * LearnCircuitBuildTimeout. */
-    if (circuit_build_times_disabled(options)) {
+    if (circuit_build_times_disabled_(options, 1)) {
       severity = LOG_INFO;
     }
     log_fn(severity, LD_CONFIG, "You disabled LearnCircuitBuildTimeout, but "
@@ -5056,6 +5058,7 @@ options_init_from_string(const char *cf_defaults, const char *cf,
   config_line_t *cl;
   int retval;
   setopt_err_t err = SETOPT_ERR_MISC;
+  int cf_has_include = 0;
   tor_assert(msg);
 
   oldoptions = global_options; /* get_options unfortunately asserts if
@@ -5072,7 +5075,8 @@ options_init_from_string(const char *cf_defaults, const char *cf,
     if (!body)
       continue;
     /* get config lines, assign them */
-    retval = config_get_lines(body, &cl, 1);
+    retval = config_get_lines_include(body, &cl, 1,
+                                      body == cf ? &cf_has_include : NULL);
     if (retval < 0) {
       err = SETOPT_ERR_PARSE;
       goto err;
@@ -5099,6 +5103,8 @@ options_init_from_string(const char *cf_defaults, const char *cf,
     err = SETOPT_ERR_PARSE;
     goto err;
   }
+
+  newoptions->IncludeUsed = cf_has_include;
 
   /* If this is a testing network configuration, change defaults
    * for a list of dependent config options, re-initialize newoptions
@@ -5143,7 +5149,8 @@ options_init_from_string(const char *cf_defaults, const char *cf,
       if (!body)
         continue;
       /* get config lines, assign them */
-      retval = config_get_lines(body, &cl, 1);
+      retval = config_get_lines_include(body, &cl, 1,
+                                        body == cf ? &cf_has_include : NULL);
       if (retval < 0) {
         err = SETOPT_ERR_PARSE;
         goto err;
@@ -5165,6 +5172,8 @@ options_init_from_string(const char *cf_defaults, const char *cf,
       goto err;
     }
   }
+
+  newoptions->IncludeUsed = cf_has_include;
 
   /* Validate newoptions */
   if (options_validate(oldoptions, newoptions, newdefaultoptions,
