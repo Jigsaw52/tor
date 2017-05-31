@@ -461,7 +461,7 @@ encode_enc_key(const hs_desc_intro_point_t *ip)
   tor_assert(ip);
 
   /* Base64 encode the encryption key for the "enc-key" field. */
-  if (curve25519_public_to_base64(key_b64, &ip->enc_key) < 0) {
+  if (curve25519_public_to_base64(key_b64, &ip->enc_key, 0) < 0) {
     goto done;
   }
   if (tor_cert_encode_ed22519(ip->enc_key_cert, &encoded_cert) < 0) {
@@ -849,7 +849,7 @@ get_outer_encrypted_layer_plaintext(const hs_descriptor_t *desc,
       goto done;
     }
     if (curve25519_public_to_base64(fake_key_base64,
-                                    &fake_x25519_keypair.pubkey) < 0) {
+                                    &fake_x25519_keypair.pubkey, 0) < 0) {
       goto done;
     }
     smartlist_add_asprintf(lines, "%s %s\n",

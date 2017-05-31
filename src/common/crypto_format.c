@@ -123,23 +123,37 @@ crypto_read_tagged_contents_from_file(const char *fname,
   return r;
 }
 
-/** Encode <b>pkey</b> as a base64-encoded string, without trailing "="
- * characters, in the buffer <b>output</b>, which must have at least
- * CURVE25519_BASE64_NOPAD_BUFSIZE bytes available.  Return 0 on success, -1
+/** Encode <b>pkey</b> as a base64-encoded string in the buffer <b>output</b>.
+ * If <b>pad</b> is 0 do not include trailing "=" characters, otherwise include
+ * them. <b>output</b> must have at least CURVE25519_BASE64_BUFSIZE bytes
+ * available, even if <b>pad</b> is 0.  Return 0 on success, -1
  * on failure. */
 int
 curve25519_public_to_base64(char *output,
-                            const curve25519_public_key_t *pkey)
+                            const curve25519_public_key_t *pkey, int pad)
 {
   // base64_encode_nopad requires at least CURVE25519_BASE64_BUFSIZE
   char buf[CURVE25519_BASE64_BUFSIZE];
-  int n = base64_encode_nopad(buf, sizeof(buf),
-                              (const uint8_t*)pkey->public_key,
-                              CURVE25519_PUBKEY_LEN);
-  if (n != CURVE25519_BASE64_NOPAD_LEN) {
+  int n, expected_len, buf_size;
+  if (pad) {
+    n = base64_encode(buf, sizeof(buf),
+                      (const char*)pkey->public_key,
+                      CURVE25519_PUBKEY_LEN, 0);
+    expected_len = CURVE25519_BASE64_LEN;
+    buf_size = CURVE25519_BASE64_BUFSIZE;
+  } else {
+    n = base64_encode_nopad(buf, sizeof(buf),
+                            (const uint8_t*)pkey->public_key,
+                            CURVE25519_PUBKEY_LEN);
+    expected_len = CURVE25519_BASE64_NOPAD_LEN;
+    buf_size = CURVE25519_BASE64_NOPAD_BUFSIZE;
+  }
+
+  if (n != expected_len) {
     return -1;
   }
-  memcpy(output, buf, CURVE25519_BASE64_NOPAD_BUFSIZE);
+  memcpy(output, buf, buf_size);
+
   return 0;
 }
 
