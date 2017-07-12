@@ -51,6 +51,6 @@ int config_get_lines_include(const char *string, config_line_t **result,
 void config_free_lines(config_line_t *front);
 const char *parse_config_line_from_str_verbose(const char *line,
                                        char **key_out, char **value_out,
-                                       const char **err_out);
+                                       char **raw_out, const char **err_out);
 #endif
 

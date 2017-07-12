@@ -95,7 +95,7 @@ config_get_lines_aux(const char *string, config_line_t **result, int extended,
                      config_line_t **last)
 {
   config_line_t *list = NULL, **next, *list_last = NULL;
-  char *k, *v;
+  char *k, *v, *raw;
   const char *parse_err;
   int include_used = 0;
 
@@ -107,16 +107,19 @@ config_get_lines_aux(const char *string, config_line_t **result, int extended,
 
   next = &list;
   do {
-    k = v = NULL;
-    string = parse_config_line_from_str_verbose(string, &k, &v, &parse_err);
+    k = v = raw = NULL;
+    string = parse_config_line_from_str_verbose(string, &k, &v, &raw,
+                                                &parse_err);
     if (!string) {
       log_warn(LD_CONFIG, "Error while parsing configuration: %s",
                parse_err?parse_err:"<unknown>");
       config_free_lines(list);
       tor_free(k);
       tor_free(v);
+      tor_free(raw);
       return -1;
     }
+
     if (k && v) {
       unsigned command = CONFIG_LINE_NORMAL;
       if (extended) {
@@ -145,9 +148,11 @@ config_get_lines_aux(const char *string, config_line_t **result, int extended,
                    "file or directory: \"%s\".", v);
           config_free_lines(list);
           tor_free(v);
+          tor_free(raw);
           return -1;
         }
         tor_free(v);
+        tor_free(raw);
       } else {
         /* This list can get long, so we keep a pointer to the end of it
          * rather than using config_line_append over and over and getting
@@ -155,7 +160,7 @@ config_get_lines_aux(const char *string, config_line_t **result, int extended,
         *next = tor_malloc_zero(sizeof(**next));
         (*next)->key = k;
         (*next)->value = v;
-        (*next)->raw_value = NULL;
+        (*next)->raw_value = raw;
         (*next)->next = NULL;
         (*next)->command = command;
         list_last = *next;
@@ -164,6 +169,7 @@ config_get_lines_aux(const char *string, config_line_t **result, int extended,
     } else {
       tor_free(k);
       tor_free(v);
+      tor_free(raw);
     }
   } while (*string);
 
@@ -395,21 +401,23 @@ config_count_key(const config_line_t *a, const char *key)
 /** Given a string containing part of a configuration file or similar format,
  * advance past comments and whitespace and try to parse a single line.  If we
  * parse a line successfully, set *<b>key_out</b> to a new string holding the
- * key portion and *<b>value_out</b> to a new string holding the value portion
- * of the line, and return a pointer to the start of the next line.  If we run
- * out of data, return a pointer to the end of the string.  If we encounter an
- * error, return NULL and set *<b>err_out</b> (if provided) to an error
- * message.
+ * key portion, *<b>value_out</b> to a new string holding the value portion
+ * of the line and <b>raw_out</b> to a new string holding the value as present
+ * on line before any unescaping, and return a pointer to the start of the next
+ * line.  If we run out of data, return a pointer to the end of the string.
+ * If we encounter an error, return NULL and set *<b>err_out</b> (if provided)
+ * to an error message.
  */
 const char *
 parse_config_line_from_str_verbose(const char *line, char **key_out,
                                    char **value_out,
+                                   char **raw_out,
                                    const char **err_out)
 {
   /*
     See torrc_format.txt for a description of the (silly) format this parses.
    */
-  const char *key, *val, *cp;
+  const char *key, *val, *cp, *raw_start, *raw_end;
   int continuation = 0;
 
   tor_assert(key_out);
@@ -449,11 +457,13 @@ parse_config_line_from_str_verbose(const char *line, char **key_out,
 
   /* Find the end of the line. */
   if (*line == '\"') { // XXX No continuation handling is done here
+    raw_start = line;
     if (!(line = unescape_string(line, value_out, NULL))) {
       if (err_out)
         *err_out = "Invalid escape sequence in quoted string";
       return NULL;
     }
+    raw_end = line;
     while (*line == ' ' || *line == '\t')
       ++line;
     if (*line == '\r' && *(++line) == '\n')
@@ -464,6 +474,7 @@ parse_config_line_from_str_verbose(const char *line, char **key_out,
       return NULL;
     }
   } else {
+    raw_start = line;
     /* Look for the end of the line. */
     while (*line && *line != '\n' && (*line != '#' || continuation)) {
       if (*line == '\\' && line[1] == '\n') {
@@ -479,6 +490,7 @@ parse_config_line_from_str_verbose(const char *line, char **key_out,
         ++line;
       }
     }
+    raw_end = line;
 
     if (*line == '\n') {
       cp = line++;
@@ -519,6 +531,10 @@ parse_config_line_from_str_verbose(const char *line, char **key_out,
     } while (*line && *line != '\n');
   }
   while (TOR_ISSPACE(*line)) ++line;
+
+  if (raw_out) {
+    *raw_out = tor_strndup(raw_start, raw_end - raw_start);
+  }
 
   return line;
 }
