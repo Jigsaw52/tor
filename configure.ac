@@ -1241,6 +1241,14 @@ AC_CHECK_HEADERS(linux/if.h,[],[],
 #endif
 ])
 
+AC_CHECK_HEADERS(linux/seccomp.h,
+        linux_seccomp=1, linux_seccomp=0,
+[
+#ifdef HAVE_LINUX_SECCOMP_H
+#include <linux/seccomp.h>
+#endif
+])
+
 AC_CHECK_HEADERS(linux/netfilter_ipv4.h,
         linux_netfilter_ipv4=1, linux_netfilter_ipv4=0,
 [#ifdef HAVE_SYS_TYPES_H

@@ -62,6 +62,10 @@
 #include <time.h>
 #include <poll.h>
 
+#ifdef HAVE_LINUX_SECCOMP_H
+#include <linux/seccomp.h>
+#endif
+
 #ifdef HAVE_LINUX_NETFILTER_IPV4_H
 #include <linux/netfilter_ipv4.h>
 #endif
@@ -151,6 +155,7 @@ static int filter_nopar_gen[] = {
     SCMP_SYS(fstat64),
 #endif
     SCMP_SYS(futex),
+    SCMP_SYS(getdents),
     SCMP_SYS(getdents64),
     SCMP_SYS(getegid),
 #ifdef __NR_getegid32
@@ -879,6 +884,41 @@ sb_prctl(scmp_filter_ctx ctx, sandbox_cfg_t *filter)
   if (rc)
     return rc;
 
+  rc = seccomp_rule_add_2(ctx, SCMP_ACT_ALLOW, SCMP_SYS(prctl),
+      SCMP_CMP(0, SCMP_CMP_EQ, PR_SET_NO_NEW_PRIVS),
+      SCMP_CMP(1, SCMP_CMP_EQ, 1));
+  if (rc)
+    return rc;
+
+#ifdef HAVE_LINUX_SECCOMP_H
+  rc = seccomp_rule_add_2(ctx, SCMP_ACT_ALLOW, SCMP_SYS(prctl),
+      SCMP_CMP(0, SCMP_CMP_EQ, PR_SET_SECCOMP),
+      SCMP_CMP(1, SCMP_CMP_EQ, SECCOMP_MODE_FILTER));
+  if (rc)
+    return rc;
+#endif
+
+  return 0;
+}
+
+/**
+ * Function responsible for setting up the seccomp syscall for
+ * the seccomp filter sandbox.
+ */
+static int
+sb_seccomp(scmp_filter_ctx ctx, sandbox_cfg_t *filter)
+{
+  int rc = 0;
+  (void) filter;
+
+#ifdef HAVE_LINUX_SECCOMP_H
+  rc = seccomp_rule_add_2(ctx, SCMP_ACT_ALLOW, SCMP_SYS(seccomp),
+      SCMP_CMP(0, SCMP_CMP_EQ, SECCOMP_SET_MODE_FILTER),
+      SCMP_CMP(1, SCMP_CMP_EQ, 0));
+  if (rc)
+    return rc;
+#endif
+
   return 0;
 }
 
@@ -1082,6 +1122,7 @@ static sandbox_filter_func_t filter_func[] = {
 #endif
     sb_epoll_ctl,
     sb_prctl,
+    sb_seccomp,
     sb_mprotect,
     sb_flock,
     sb_futex,
@@ -1893,6 +1934,19 @@ sandbox_init(sandbox_cfg_t *cfg)
            "is disabled on your platform.");
   return 0;
 #endif
+}
+
+int
+sandbox_append(sandbox_cfg_t* cfg)
+{
+  tor_assert(sandbox_is_active());
+  if (install_syscall_filter(cfg))
+    return -2;
+
+  if (register_cfg(cfg))
+    return -3;
+
+  return 0;
 }
 
 #ifndef USE_LIBSECCOMP

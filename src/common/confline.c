@@ -9,6 +9,7 @@
 #include "torlog.h"
 #include "util.h"
 #include "container.h"
+#include "sandbox.h"
 
 static int config_get_lines_aux(const char *string, config_line_t **result,
                                 int extended, int allow_include,
@@ -21,6 +22,7 @@ static int config_get_included_list(const char *path, int recursion_level,
 static int config_process_include(const char *path, int recursion_level,
                                   int extended, config_line_t **list,
                                   config_line_t **list_last);
+static int config_register_sandbox_open(const char *path);
 
 /** Helper: allocate a new configuration option mapping 'key' to 'val',
  * append it to *<b>lst</b>. */
@@ -275,26 +277,25 @@ config_process_include(const char *path, int recursion_level, int extended,
 {
   config_line_t *ret_list = NULL;
   config_line_t **next = &ret_list;
-#if 0
-  // Disabled -- we already unescape_string() on the result. */
-  char *unquoted_path = get_unquoted_path(path);
-  if (!unquoted_path) {
+
+  if (config_register_sandbox_open(path) < 0) {
+    log_err(LD_BUG,"Failed to create syscall sandbox filter");
     return -1;
   }
 
-  smartlist_t *config_files = config_get_file_list(unquoted_path);
-  if (!config_files) {
-    tor_free(unquoted_path);
-    return -1;
-  }
-  tor_free(unquoted_path);
-#endif
   smartlist_t *config_files = config_get_file_list(path);
   if (!config_files) {
     return -1;
   }
 
   SMARTLIST_FOREACH_BEGIN(config_files, char *, config_file) {
+    if (config_register_sandbox_open(config_file) < 0) {
+      log_err(LD_BUG,"Failed to create syscall sandbox filter");
+      SMARTLIST_FOREACH(config_files, char *, f, tor_free(f));
+      smartlist_free(config_files);
+      return -1;
+    }
+
     config_line_t *included_list = NULL;
     if (config_get_included_list(config_file, recursion_level, extended,
                                   &included_list, list_last) < 0) {
@@ -311,6 +312,23 @@ config_process_include(const char *path, int recursion_level, int extended,
   } SMARTLIST_FOREACH_END(config_file);
   smartlist_free(config_files);
   *list = ret_list;
+  return 0;
+}
+
+/**
+ * Registers a new sandbox filter for the open syscall to allow <b>path</b> to
+ * be read.
+ */
+static int
+config_register_sandbox_open(const char *path)
+{
+  if (sandbox_is_active()) {
+    sandbox_cfg_t *cfg = sandbox_cfg_new();
+    sandbox_cfg_allow_open_filename(&cfg, tor_strdup(path));
+    if (sandbox_append(cfg) != 0) {
+      return -1;
+    }
+  }
   return 0;
 }
 
