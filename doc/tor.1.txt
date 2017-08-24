@@ -546,9 +546,10 @@ GENERAL OPTIONS
     If set to 1, Tor will run securely through the use of a syscall sandbox.
     Otherwise the sandbox will be disabled. The option is currently an
     experimental feature. Can not be changed while tor is running.
-
+ +
     When the Sandbox is 1, the following options can not be changed when tor
     is running:
++
     Address
     ConnLimit
     CookieAuthFile
@@ -556,6 +557,8 @@ GENERAL OPTIONS
     ExtORPortCookieAuthFile
     Logs
     ServerDNSResolvConfFile
+    %include statement
++
     Tor must remain in client or server mode (some changes to ClientOnly and
     ORPort are not allowed).
     (Default: 0)

@@ -1,0 +1,4 @@
+  o Minor bugfix (sandbox, config):
+    - Prohibit any transition when Sandbox is active and there is at least one
+      %include statement in the options. Closes ticket 22605.; bugfix on
+      %tor-0.3.1.1-alpha.

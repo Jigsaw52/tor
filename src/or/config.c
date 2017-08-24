@@ -4472,6 +4472,11 @@ options_transition_allowed(const or_options_t *old,
                         "Sandbox is active");
       return -1;
     }
+    if (old->IncludeUsed != new_val->IncludeUsed) {
+      *msg = tor_strdup("Can't reload with %%include statement while "
+                        "Sandbox is active");
+      return -1;
+    }
   }
 
   return 0;
