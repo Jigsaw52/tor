@@ -19,6 +19,13 @@
 
 #define MAX_INCLUDE_RECURSION_LEVEL 31
 
+#ifdef _WIN32
+#define IS_GLOB_CHAR(s,i) (((s)[(i)]) == '*' || ((s)[(i)]) == '?')
+#else
+#define IS_GLOB_CHAR(s,i) ((((s)[(i)]) == '*' || ((s)[(i)]) == '?') &&\
+                           ((i) == 0 || (s)[(i)-1] != '\\')) /* check escape */
+#endif
+
 /** A linked list of lines in a config file, or elsewhere */
 typedef struct config_line_t {
   char *key;

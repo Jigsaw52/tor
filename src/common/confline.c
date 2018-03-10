@@ -14,16 +14,18 @@ static int config_get_lines_aux(const char *string, config_line_t **result,
                                 int extended, int allow_include,
                                 int *has_include, smartlist_t *opened_lst,
                                 int recursion_level, config_line_t **last);
-static smartlist_t *config_get_file_list(const char *path,
+static smartlist_t *config_get_file_list(const char *pattern,
                                          smartlist_t *opened_files);
 static int config_get_included_config(const char *path, int recursion_level,
                                       int extended, config_line_t **config,
                                       config_line_t **config_last,
                                       smartlist_t *opened_lst);
-static int config_process_include(const char *path, int recursion_level,
+static int config_process_include(const char *pattern, int recursion_level,
                                   int extended, config_line_t **list,
                                   config_line_t **list_last,
                                   smartlist_t *opened_lst);
+static int has_glob(const char *s);
+static smartlist_t *config_get_glob_opened_files(const char *pattern);
 
 /** Helper: allocate a new configuration option mapping 'key' to 'val',
  * append it to *<b>lst</b>. */
@@ -205,62 +207,97 @@ config_get_lines(const char *string, config_line_t **result, int extended)
                               NULL);
 }
 
-/** Adds a list of configuration files present on <b>path</b> to
- * <b>file_list</b>. <b>path</b> can be a file or a directory. If it is a file,
- * only that file will be added to <b>file_list</b>. If it is a directory,
+/** Returns a list of configuration files present on paths that match
+ * <b>pattern</b>. The pattern is expanded and then all the paths are
+ * processed. A path can be a file or a directory. If it is a file, that file
+ * will be added to the list to be returned. If it is a directory,
  * all paths for files on that directory root (no recursion) except for files
- * whose name starts with a dot will be added to <b>file_list</b>.
+ * whose name starts with a dot will be added to the list to be returned.
  * <b>opened_files</b> will have a list of files opened by this function
- * if provided. Return 0 on success, -1 on failure. Ignores empty files.
+ * if provided. Return NULL on failure. Ignores empty files.
  */
 static smartlist_t *
-config_get_file_list(const char *path, smartlist_t *opened_files)
+config_get_file_list(const char *pattern, smartlist_t *opened_files)
 {
-  smartlist_t *file_list = smartlist_new();
-
-  if (opened_files) {
-    smartlist_add_strdup(opened_files, path);
-  }
-
-  file_status_t file_type = file_status(path);
-  if (file_type == FN_FILE) {
-    smartlist_add_strdup(file_list, path);
-    return file_list;
-  } else if (file_type == FN_DIR) {
-    smartlist_t *all_files = tor_listdir(path);
-    if (!all_files) {
-      smartlist_free(file_list);
-      return NULL;
-    }
-    smartlist_sort_strings(all_files);
-    SMARTLIST_FOREACH_BEGIN(all_files, char *, f) {
-      if (f[0] == '.') {
-        tor_free(f);
-        continue;
-      }
-
-      char *fullname;
-      tor_asprintf(&fullname, "%s"PATH_SEPARATOR"%s", path, f);
-      tor_free(f);
-
-      if (opened_files) {
-        smartlist_add_strdup(opened_files, fullname);
-      }
-
-      if (file_status(fullname) != FN_FILE) {
-        tor_free(fullname);
-        continue;
-      }
-      smartlist_add(file_list, fullname);
-    } SMARTLIST_FOREACH_END(f);
-    smartlist_free(all_files);
-    return file_list;
-  } else if (file_type == FN_EMPTY) {
-      return file_list;
-  } else {
-    smartlist_free(file_list);
+  smartlist_t *matches = tor_glob(pattern);
+  if (!matches) {
     return NULL;
   }
+
+  // if it is not a glob, return error when the path is missing
+  if (!has_glob(pattern) && smartlist_len(matches) == 0) {
+    smartlist_free(matches);
+    return NULL;
+  }
+
+  if (opened_files) {
+    smartlist_t *glob_opened = config_get_glob_opened_files(pattern);
+    if (!glob_opened) {
+      SMARTLIST_FOREACH(matches, char *, f, tor_free(f));
+      smartlist_free(matches);
+      return NULL;
+    }
+    smartlist_add_all(opened_files, glob_opened);
+    smartlist_free(glob_opened);
+  }
+
+  smartlist_sort_strings(matches);
+  int error_found = 0;
+  smartlist_t *file_list = smartlist_new();
+  SMARTLIST_FOREACH_BEGIN(matches, char *, path) {
+    if (opened_files) {
+      smartlist_add_strdup(opened_files, path);
+    }
+
+    file_status_t file_type = file_status(path);
+    if (file_type == FN_FILE) {
+      smartlist_add_strdup(file_list, path);
+    } else if (file_type == FN_DIR) {
+      smartlist_t *all_files = tor_listdir(path);
+      if (!all_files) {
+        error_found = 1;
+        break;
+      }
+      smartlist_sort_strings(all_files);
+      SMARTLIST_FOREACH_BEGIN(all_files, char *, f) {
+        if (f[0] == '.') {
+          tor_free(f);
+          continue;
+        }
+
+        char *fullname;
+        tor_asprintf(&fullname, "%s"PATH_SEPARATOR"%s", path, f);
+        tor_free(f);
+
+        if (opened_files) {
+          smartlist_add_strdup(opened_files, fullname);
+        }
+
+        if (file_status(fullname) != FN_FILE) {
+          tor_free(fullname);
+          continue;
+        }
+        smartlist_add(file_list, fullname);
+      } SMARTLIST_FOREACH_END(f);
+      smartlist_free(all_files);
+    } else if (file_type == FN_EMPTY) {
+        continue;
+    } else {
+      error_found = 1;
+      break;
+    }
+  } SMARTLIST_FOREACH_END(path);
+
+  SMARTLIST_FOREACH(matches, char *, f, tor_free(f));
+  smartlist_free(matches);
+
+  if (error_found) {
+    SMARTLIST_FOREACH(file_list, char *, f, tor_free(f));
+    smartlist_free(file_list);
+    file_list = NULL;
+  }
+
+  return file_list;
 }
 
 /** Creates a list of config lines present on included <b>path</b>.
@@ -287,19 +324,19 @@ config_get_included_config(const char *path, int recursion_level, int extended,
   return 0;
 }
 
-/** Process an %include <b>path</b> in a config file. Set <b>list</b> to the
+/** Process an %include <b>pattern</b> in a config file. Set <b>list</b> to the
  * list of configuration settings obtained and <b>list_last</b> to the last
  * element of the same list. <b>opened_lst</b> will have a list of opened
  * files if provided. Return 0 on success, -1 on failure. */
 static int
-config_process_include(const char *path, int recursion_level, int extended,
+config_process_include(const char *pattern, int recursion_level, int extended,
                        config_line_t **list, config_line_t **list_last,
                        smartlist_t *opened_lst)
 {
   config_line_t *ret_list = NULL;
   config_line_t **next = &ret_list;
 
-  smartlist_t *config_files = config_get_file_list(path, opened_lst);
+  smartlist_t *config_files = config_get_file_list(pattern, opened_lst);
   if (!config_files) {
     return -1;
   }
@@ -326,6 +363,98 @@ config_process_include(const char *path, int recursion_level, int extended,
   SMARTLIST_FOREACH(config_files, char *, f, tor_free(f));
   smartlist_free(config_files);
   return rv;
+}
+
+/** Returns a list of files that are opened by the tor_glob function when
+ * called with <b>pattern</b>. Returns NULL on error. The purpose of this
+ * function is to create a list of files to be added to the sandbox white list
+ * before the sandbox is enabled. */
+static smartlist_t *
+config_get_glob_opened_files(const char *pattern)
+{
+  smartlist_t *results = smartlist_new();
+  int i, prev_sep = -1, curr_sep = -1;
+  int glob_found = 0, error_found = 0;
+
+  // search for first path fragment with globs
+  for (i = 0; pattern[i]; i++) {
+    if (IS_GLOB_CHAR(pattern, i)) {
+      glob_found = 1;
+    }
+
+    int last_char = !pattern[i+1];
+    if (pattern[i] == *PATH_SEPARATOR || last_char) {
+      prev_sep = curr_sep;
+      curr_sep = i;
+
+      if (glob_found) {
+        // add path before the glob to results
+        int len = prev_sep < 1 ? prev_sep + 1 : prev_sep; // handle /*
+        char *path_until_glob = tor_strndup(pattern, len);
+        smartlist_add(results, path_until_glob);
+
+        // if the following fragments have no globs, we're done
+        if (!has_glob(&pattern[curr_sep+1])) {
+          break;
+        }
+
+        // unglob current fragment
+        char *glob_path = tor_strndup(pattern, curr_sep);
+        smartlist_t *unglobbed_paths = tor_glob(glob_path);
+        tor_free(glob_path);
+        if (!unglobbed_paths) {
+          error_found = 1;
+          break;
+        }
+
+        // for each path for current fragment, add the rest of the pattern
+        // and call recursively to get all opened paths
+        SMARTLIST_FOREACH_BEGIN(unglobbed_paths, char *, current_path) {
+          file_status_t file_type = file_status(current_path);
+          if (file_type != FN_DIR) {
+            // file_status needs the string interned or we get a warning
+            smartlist_add_strdup(results, current_path);
+            continue;
+          }
+
+          char *next_path;
+          tor_asprintf(&next_path, "%s"PATH_SEPARATOR"%s", current_path,
+                       &pattern[curr_sep+1]);
+          smartlist_t *opened_next = config_get_glob_opened_files(next_path);
+          tor_free(next_path);
+          if (!opened_next) {
+            error_found = 1;
+            break;
+          }
+          smartlist_add_all(results, opened_next);
+          smartlist_free(opened_next);
+        } SMARTLIST_FOREACH_END(current_path);
+        SMARTLIST_FOREACH(unglobbed_paths, char *, p, tor_free(p));
+        smartlist_free(unglobbed_paths);
+        break;
+      }
+    }
+  }
+
+  if (error_found) {
+    SMARTLIST_FOREACH(results, char *, p, tor_free(p));
+    smartlist_free(results);
+    results = NULL;
+  }
+
+  return results;
+}
+
+static int
+has_glob(const char *s)
+{
+  int i;
+  for (i = 0; s[i]; i++) {
+    if (IS_GLOB_CHAR(s, i)) {
+      return 1;
+    }
+  }
+  return 0;
 }
 
 /**
