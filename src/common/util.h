@@ -407,6 +407,7 @@ const char *unescape_string(const char *s, char **result, size_t *size_out);
 char *get_unquoted_path(const char *path);
 char *expand_filename(const char *filename);
 MOCK_DECL(struct smartlist_t *, tor_listdir, (const char *dirname));
+struct smartlist_t *tor_glob(const char *pattern);
 int path_is_relative(const char *filename);
 
 /* Process helpers */
