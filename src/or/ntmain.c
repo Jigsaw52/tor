@@ -25,6 +25,7 @@
 #include "ntmain.h"
 
 #include <windows.h>
+#include <winerror.h>
 #define GENSRV_SERVICENAME  "tor"
 #define GENSRV_DISPLAYNAME  "Tor Win32 Service"
 #define GENSRV_DESCRIPTION  \

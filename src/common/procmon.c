@@ -19,6 +19,7 @@
 
 #ifdef _WIN32
 #include <windows.h>
+#include <winerror.h>
 #endif
 
 #if (0 == SIZEOF_PID_T) && defined(_WIN32)

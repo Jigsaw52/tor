@@ -15,6 +15,7 @@
 #include "compat.h"
 #include <windows.h>
 #include <process.h>
+#include <winerror.h>
 #include "util.h"
 #include "container.h"
 #include "torlog.h"

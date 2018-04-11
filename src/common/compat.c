@@ -73,6 +73,7 @@
 #ifdef _WIN32
 #include <conio.h>
 #include <wchar.h>
+#include <winerror.h>
 /* Some mingw headers lack these. :p */
 #if defined(HAVE_DECL__GETWCH) && !HAVE_DECL__GETWCH
 wint_t _getwch(void);

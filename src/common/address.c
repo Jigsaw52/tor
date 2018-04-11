@@ -33,6 +33,7 @@
 #include <process.h>
 #include <windows.h>
 #include <iphlpapi.h>
+#include <winerror.h>
 #endif /* defined(_WIN32) */
 
 #include "compat.h"

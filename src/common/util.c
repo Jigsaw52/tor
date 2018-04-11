@@ -31,6 +31,7 @@
 #include <process.h>
 #include <tchar.h>
 #include <winbase.h>
+#include <winerror.h>
 #else /* !(defined(_WIN32)) */
 #include <dirent.h>
 #include <pwd.h>
