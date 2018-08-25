@@ -1,0 +1,6 @@
+  o Minor bugfixes (linux seccomp2 sandbox):
+    - Fix a regression on sandboxing rules for the openat() syscall.
+      The fix for bug 25440 fixed the problem on some systems but broke 
+      tor on other systems. We now reintroduce the openat rule that 
+      existed prior to the 25440 fix (and keep new rule) to make tor 
+      work again on affected systems. Patch from Daniel Pinto.
