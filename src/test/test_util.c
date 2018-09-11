@@ -4314,6 +4314,161 @@ test_util_glob(void *ptr)
 }
 
 static void
+test_util_get_glob_opened_files(void *ptr)
+{
+  (void)ptr;
+
+  smartlist_t *results = NULL;
+  int r, i;
+  char *dir1 = NULL, *dir2 = NULL, *forbidden = NULL, *dirname = NULL;
+  char *expected = NULL, *pattern = NULL;
+  // used for cleanup
+  char *dir1_forbidden = NULL, *dir2_forbidden = NULL;
+  char *forbidden_forbidden = NULL;
+
+  dirname = tor_strdup(get_fname("test_get_glob_opened_files"));
+  tt_ptr_op(dirname, OP_NE, NULL);
+
+#ifdef _WIN32
+  r = mkdir(dirname);
+#else
+  r = mkdir(dirname, 0700);
+#endif
+  if (r) {
+    fprintf(stderr, "Can't create directory %s:", dirname);
+    perror("");
+    exit(1);
+  }
+
+  tt_int_op(0, OP_EQ, create_test_directory_structure(dirname));
+  tor_asprintf(&dir1, "%s"PATH_SEPARATOR"dir1", dirname);
+  tor_asprintf(&dir1_forbidden,
+               "%s"PATH_SEPARATOR"dir1"PATH_SEPARATOR"forbidden", dirname);
+  tt_int_op(0, OP_EQ, create_test_directory_structure(dir1));
+  tor_asprintf(&dir2, "%s"PATH_SEPARATOR"dir2", dirname);
+  tor_asprintf(&dir2_forbidden,
+               "%s"PATH_SEPARATOR"dir2"PATH_SEPARATOR"forbidden", dirname);
+  tt_int_op(0, OP_EQ, create_test_directory_structure(dir2));
+  tor_asprintf(&forbidden, "%s"PATH_SEPARATOR"forbidden", dirname);
+  tor_asprintf(&forbidden_forbidden,
+               "%s"PATH_SEPARATOR"forbidden"PATH_SEPARATOR"forbidden",dirname);
+#ifndef _WIN32
+  chmod(forbidden, 0700);
+#endif
+  tt_int_op(0, OP_EQ, create_test_directory_structure(forbidden));
+#ifndef _WIN32
+  chmod(forbidden, 0);
+#endif
+
+#define T(input,result) \
+  do { \
+    if (*input) { \
+      tor_asprintf(&pattern, "%s"PATH_SEPARATOR"%s", dirname, input); \
+    } else { /* do not add path separator if empty string */ \
+      tor_asprintf(&pattern, "%s", dirname); \
+    } \
+    results = get_glob_opened_files(pattern); \
+    tor_free(pattern); \
+    tt_assert(results); \
+    smartlist_sort_strings(results); \
+    i = 0; \
+    tt_int_op(smartlist_len(results), OP_EQ, \
+                          sizeof(result)/sizeof(*result)); \
+    if (sizeof(result) > 0) { /* avoid compiler warning */ \
+      SMARTLIST_FOREACH_BEGIN(results, const char *, f) { \
+        if (*result[i]) { \
+          tor_asprintf(&expected, "%s"PATH_SEPARATOR"%s", dirname, result[i]);\
+        } else { /* do not add path separator if empty string */ \
+          tor_asprintf(&expected, "%s", dirname); \
+        } \
+        tt_str_op(f, OP_EQ, expected); \
+        i++; \
+        tor_free(expected); \
+      } SMARTLIST_FOREACH_END(f); \
+      SMARTLIST_FOREACH(results, char *, f, tor_free(f)); \
+      smartlist_free(results); \
+    } \
+  } while (0);
+
+  // all files on folder
+  const char *results_test1[] = {""}; // only the folder is read
+  T("*", results_test1);
+
+  // same as before but ending in path separator
+  const char *results_test2[] = {""}; // only the folder is read
+  T("*"PATH_SEPARATOR, results_test2);
+
+  // wilcards in multiple path components
+  const char *results_test3[] = {"", "dir1", "dir2", "empty", "file1", "file2",
+                                 "forbidden"}; // folder and subfolders
+  T("*"PATH_SEPARATOR"*", results_test3);
+
+  // same as before but ending in path separator
+  const char *results_test4[] = {"", "dir1", "dir2", "empty", "file1", "file2",
+                                 "forbidden"}; // folder and subfolders
+  T("*"PATH_SEPARATOR"*"PATH_SEPARATOR, results_test4);
+
+  // no glob - folder
+  const char *results_test5[] = {};
+  T("", results_test5);
+
+  // same as before but ending in path separator
+  const char *results_test6[] = {};
+  T(PATH_SEPARATOR, results_test6);
+
+  // no glob - file
+  const char *results_test7[] = {};
+  T("file1", results_test7);
+
+  // same as before but ending in path separator
+  const char *results_test8[] = {};
+  T("file1"PATH_SEPARATOR, results_test8);
+
+  // file but with wildcard after
+  const char *results_test9[] = {"file1"};
+  T("file1"PATH_SEPARATOR"*", results_test9);
+
+  // dir inside dir
+  const char *results_test10[] = {};
+  T("dir1"PATH_SEPARATOR"dir1", results_test10);
+
+  // same as before but ending in path separator
+  const char *results_test11[] = {};
+  T("dir1"PATH_SEPARATOR"dir1"PATH_SEPARATOR, results_test11);
+
+  // no glob - empty
+  const char *results_test12[] = {};
+  T("empty", results_test12);
+
+  // same as before but ending in path separator
+  const char *results_test13[] = {};
+  T("empty"PATH_SEPARATOR, results_test13);
+
+#undef T
+
+ done:
+#ifndef _WIN32
+  chmod(forbidden, 0700);
+  chmod(dir1_forbidden, 0700);
+  chmod(dir2_forbidden, 0700);
+  chmod(forbidden_forbidden, 0700);
+#endif
+  tor_free(dir1);
+  tor_free(dir2);
+  tor_free(forbidden);
+  tor_free(dirname);
+  tor_free(dir1_forbidden);
+  tor_free(dir2_forbidden);
+  tor_free(forbidden_forbidden);
+  tor_free(expected);
+  tor_free(pattern);
+  if (results) {
+    SMARTLIST_FOREACH(results, char *, f, tor_free(f));
+    smartlist_free(results);
+  }
+}
+
+static void
 test_util_parent_dir(void *ptr)
 {
   char *cp;
@@ -6603,6 +6758,7 @@ struct testcase_t util_tests[] = {
   UTIL_TEST(asprintf, 0),
   UTIL_TEST(listdir, 0),
   UTIL_TEST(glob, 0),
+  UTIL_TEST(get_glob_opened_files, 0),
   UTIL_TEST(parent_dir, 0),
   UTIL_TEST(ftruncate, 0),
   UTIL_TEST(nowrap_math, 0),
