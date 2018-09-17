@@ -79,6 +79,10 @@
  * addresses. See #23828 and #20916. */
 #define MIN_METHOD_FOR_NO_A_LINES_IN_MICRODESC 28
 
+/** Lowest consensus method where an unpadded base64 onion-key-ntor is allowed
+ * See #7869 */
+#define MIN_METHOD_FOR_UNPADDED_NTOR_KEY 29
+
 /** Default bandwidth to clip unmeasured bandwidths to using method >=
  * MIN_METHOD_TO_CLIP_UNMEASURED_BW.  (This is not a consensus method; do not
  * get confused with the above macros.) */

@@ -3766,11 +3766,10 @@ dirvote_create_microdescriptor(const routerinfo_t *ri, int consensus_method)
   smartlist_add_asprintf(chunks, "onion-key\n%s", key);
 
   if (ri->onion_curve25519_pkey) {
-    char kbuf[128];
-    base64_encode(kbuf, sizeof(kbuf),
-                  (const char*)ri->onion_curve25519_pkey->public_key,
-                  CURVE25519_PUBKEY_LEN, BASE64_ENCODE_MULTILINE);
-    smartlist_add_asprintf(chunks, "ntor-onion-key %s", kbuf);
+    char kbuf[CURVE25519_BASE64_BUFSIZE];
+    int add_padding = (consensus_method < MIN_METHOD_FOR_UNPADDED_NTOR_KEY);
+    curve25519_public_to_base64(kbuf, ri->onion_curve25519_pkey, add_padding);
+    smartlist_add_asprintf(chunks, "ntor-onion-key %s\n", kbuf);
   }
 
   /* We originally put a lines in the micrdescriptors, but then we worked out

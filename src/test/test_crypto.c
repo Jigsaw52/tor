@@ -2231,14 +2231,17 @@ test_crypto_curve25519_encode(void *arg)
 
   curve25519_secret_key_generate(&seckey, 0);
   curve25519_public_key_generate(&key1, &seckey);
-  tt_int_op(0, OP_EQ, curve25519_public_to_base64(buf, &key1));
-  tt_int_op(CURVE25519_BASE64_PADDED_LEN, OP_EQ, strlen(buf));
+  tt_int_op(0, OP_EQ, curve25519_public_to_base64(buf, &key1, 0));
+  tt_int_op(CURVE25519_BASE64_NOPAD_LEN, OP_EQ, strlen(buf));
+
+  tt_int_op(0, OP_EQ, curve25519_public_to_base64(buf, &key1, 1));
+  tt_int_op(CURVE25519_BASE64_LEN, OP_EQ, strlen(buf));
 
   tt_int_op(0, OP_EQ, curve25519_public_from_base64(&key2, buf));
   tt_mem_op(key1.public_key,OP_EQ, key2.public_key, CURVE25519_PUBKEY_LEN);
 
-  buf[CURVE25519_BASE64_PADDED_LEN - 1] = '\0';
-  tt_int_op(CURVE25519_BASE64_PADDED_LEN-1, OP_EQ, strlen(buf));
+  buf[CURVE25519_BASE64_NOPAD_LEN] = '\0';
+  tt_int_op(CURVE25519_BASE64_NOPAD_LEN, OP_EQ, strlen(buf));
   tt_int_op(0, OP_EQ, curve25519_public_from_base64(&key3, buf));
   tt_mem_op(key1.public_key,OP_EQ, key3.public_key, CURVE25519_PUBKEY_LEN);
 

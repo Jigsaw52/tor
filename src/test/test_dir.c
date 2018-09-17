@@ -279,10 +279,9 @@ test_dir_formats(void *arg)
   strlcat(buf2, "contact Magri White <magri@elsewhere.example.com>\n",
           sizeof(buf2));
   strlcat(buf2, "ntor-onion-key ", sizeof(buf2));
-  base64_encode(cert_buf, sizeof(cert_buf),
-                (const char*)r1_onion_keypair.pubkey.public_key, 32,
-                BASE64_ENCODE_MULTILINE);
+  curve25519_public_to_base64(cert_buf, &r1_onion_keypair.pubkey, 0);
   strlcat(buf2, cert_buf, sizeof(buf2));
+  strlcat(buf2, "\n", sizeof(buf2));
   strlcat(buf2, "reject *:*\n", sizeof(buf2));
   strlcat(buf2, "tunnelled-dir-server\nrouter-signature\n", sizeof(buf2));
   buf[strlen(buf2)] = '\0'; /* Don't compare the sig; it's never the same
@@ -377,10 +376,9 @@ test_dir_formats(void *arg)
 
   strlcat(buf2, "hidden-service-dir\n", sizeof(buf2));
   strlcat(buf2, "ntor-onion-key ", sizeof(buf2));
-  base64_encode(cert_buf, sizeof(cert_buf),
-                (const char*)r2_onion_keypair.pubkey.public_key, 32,
-                BASE64_ENCODE_MULTILINE);
+  curve25519_public_to_base64(cert_buf, &r2_onion_keypair.pubkey, 0);
   strlcat(buf2, cert_buf, sizeof(buf2));
+  strlcat(buf2, "\n", sizeof(buf2));
   strlcat(buf2, "accept *:80\nreject 18.0.0.0/8:24\n", sizeof(buf2));
   strlcat(buf2, "tunnelled-dir-server\n", sizeof(buf2));
   strlcat(buf2, "router-sig-ed25519 ", sizeof(buf2));
